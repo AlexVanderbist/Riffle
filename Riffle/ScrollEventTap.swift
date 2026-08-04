@@ -1,0 +1,88 @@
+import CoreGraphics
+import Foundation
+import os
+
+/// A session-level active event tap on `scrollWheel` events. The handler
+/// returns nil to consume an event — that is the entire capture mechanism.
+///
+/// macOS disables active taps that respond too slowly (or on user request);
+/// the tap re-enables itself from the disable callbacks, with a periodic
+/// is-enabled watchdog as backstop.
+final class ScrollEventTap {
+    var handler: ((CGEvent) -> Unmanaged<CGEvent>?)?
+
+    private var tap: CFMachPort?
+    private var runLoopSource: CFRunLoopSource?
+    private var watchdog: Timer?
+    private let logger = Logger(subsystem: "com.alexvanderbist.Riffle", category: "event-tap")
+
+    var isRunning: Bool { tap != nil }
+
+    func start() {
+        guard tap == nil else { return }
+
+        let mask: CGEventMask = 1 << CGEventType.scrollWheel.rawValue
+        guard let port = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .defaultTap,
+            eventsOfInterest: mask,
+            callback: { _, type, event, userInfo in
+                guard let userInfo else { return Unmanaged.passUnretained(event) }
+                let tap = Unmanaged<ScrollEventTap>.fromOpaque(userInfo).takeUnretainedValue()
+                // The tap's run loop source lives on the main run loop, so
+                // events always arrive on the main thread.
+                return MainActor.assumeIsolated { tap.handle(type: type, event: event) }
+            },
+            userInfo: Unmanaged.passUnretained(self).toOpaque()
+        ) else {
+            logger.error("Could not create the scroll event tap")
+            return
+        }
+
+        tap = port
+        let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, port, 0)
+        runLoopSource = source
+        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+        CGEvent.tapEnable(tap: port, enable: true)
+        startWatchdog()
+        logger.info("Scroll event tap started")
+    }
+
+    func stop() {
+        guard let tap else { return }
+
+        watchdog?.invalidate()
+        watchdog = nil
+        if let runLoopSource {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
+        }
+        runLoopSource = nil
+        CFMachPortInvalidate(tap)
+        self.tap = nil
+        logger.info("Scroll event tap stopped")
+    }
+
+    private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
+            logger.warning("Event tap was disabled by macOS (\(type.rawValue)) — re-enabled")
+            return Unmanaged.passUnretained(event)
+        }
+        return handler?(event) ?? Unmanaged.passUnretained(event)
+    }
+
+    private func startWatchdog() {
+        let timer = Timer(timeInterval: 5.0, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, let tap = self.tap, !CGEvent.tapIsEnabled(tap: tap) else { return }
+                CGEvent.tapEnable(tap: tap, enable: true)
+                self.logger.warning("Watchdog found the event tap disabled — re-enabled")
+            }
+        }
+        timer.tolerance = 1.0
+        // .common keeps the watchdog running while the status bar menu is open.
+        RunLoop.main.add(timer, forMode: .common)
+        watchdog = timer
+    }
+}
