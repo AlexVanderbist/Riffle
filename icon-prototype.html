@@ -1,0 +1,498 @@
+<!doctype html>
+<!--
+  PROTOTYPE — THROWAWAY. Not production code.
+  Five icon concepts for Riffle (status bar icon + app icon), shown in mock
+  macOS contexts: menu bar light/dark at 1x and zoomed, and the app icon in a
+  mock System Settings > Accessibility row.
+  View with:  open icon-prototype.html
+  Answers wayfinder ticket #12. Capture on a prototype/* branch when resolved.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Riffle — icon prototype</title>
+<style>
+  :root {
+    --page-bg: #ececf0;
+    --card-bg: #ffffff;
+    --ink: #1d1d1f;
+    --muted: #6e6e73;
+    --hairline: rgba(0,0,0,.08);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 40px 24px 80px;
+    background: var(--page-bg);
+    color: var(--ink);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", Helvetica, Arial, sans-serif;
+  }
+  main { max-width: 880px; margin: 0 auto; }
+  h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: -.02em; }
+  .sub { color: var(--muted); margin: 0 0 32px; }
+  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 40px 0 12px; }
+
+  /* ---- menu bar mocks ---- */
+  .menubar {
+    display: flex; align-items: center; justify-content: flex-end;
+    height: 24px; padding: 0 10px; gap: 14px;
+    border-radius: 6px;
+  }
+  .menubar.light { background: linear-gradient(#f7f7f9, #eeeef1); color: rgba(0,0,0,.85); border: 1px solid var(--hairline); --knockout: #f3f3f5; }
+  .menubar.dark  { background: linear-gradient(#2a2a2e, #212124); color: rgba(255,255,255,.88); --knockout: #26262a; }
+  .menubar .icon { width: 16px; height: 16px; flex: none; }
+  .menubar .candidate { position: relative; }
+  .menubar .label {
+    position: absolute; top: -18px; left: 50%; transform: translateX(-50%);
+    font-size: 10px; color: var(--muted); pointer-events: none;
+  }
+  .menubar .clock { font-size: 12px; font-weight: 500; white-space: nowrap; }
+  .barwrap { padding-top: 18px; display: grid; gap: 14px; }
+
+  /* ---- concept cards ---- */
+  .card {
+    background: var(--card-bg); border-radius: 14px; padding: 20px 22px;
+    margin: 14px 0; box-shadow: 0 1px 3px rgba(0,0,0,.07);
+  }
+  .card h3 { margin: 0 0 2px; font-size: 17px; }
+  .card .why { color: var(--muted); margin: 0 0 16px; }
+  .row { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-start; }
+  .cell { display: flex; flex-direction: column; gap: 6px; }
+  .cell .cap { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .zoom { display: flex; gap: 10px; }
+  .zoombox {
+    width: 72px; height: 72px; border-radius: 10px;
+    display: grid; place-items: center;
+  }
+  .zoombox.light { background: #f2f2f5; color: rgba(0,0,0,.85); border: 1px solid var(--hairline); --knockout: #f2f2f5; }
+  .zoombox.dark  { background: #232326; color: rgba(255,255,255,.88); --knockout: #232326; }
+  .zoombox .icon { width: 56px; height: 56px; }
+  .minibar { width: 260px; }
+
+  /* ---- app icon ---- */
+  .appicon { border-radius: 22.5%; box-shadow: 0 4px 10px rgba(0,0,0,.18); display: block; }
+  .appicon.big { width: 116px; height: 116px; }
+  .appicon.small { width: 30px; height: 30px; border-radius: 22.5%; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+
+  /* ---- settings row mock ---- */
+  .settings {
+    width: 320px; background: #f5f5f7; border: 1px solid var(--hairline);
+    border-radius: 10px; overflow: hidden; font-size: 13px;
+  }
+  .settings .hdr { padding: 8px 12px; color: var(--muted); font-size: 11px; border-bottom: 1px solid var(--hairline); }
+  .settings .row2 { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: #fff; }
+  .settings .row2 + .row2 { border-top: 1px solid var(--hairline); }
+  .settings .name { flex: 1; }
+  .toggle {
+    width: 36px; height: 21px; border-radius: 11px; background: #34c759; position: relative; flex: none;
+  }
+  .toggle::after {
+    content: ""; position: absolute; top: 2px; right: 2px; width: 17px; height: 17px;
+    border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25);
+  }
+  .toggle.off { background: #d1d1d6; }
+  .toggle.off::after { right: auto; left: 2px; }
+  .genapp { width: 30px; height: 30px; border-radius: 22.5%; display: grid; place-items: center; color: #fff; font-size: 15px; flex: none; }
+
+  /* ---- F variant grid ---- */
+  .vgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 18px; }
+  .vcell { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+  .vcell .cap { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .vcell .pair { display: flex; align-items: flex-end; gap: 10px; }
+  .vcell .appicon.big { width: 96px; height: 96px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Riffle — icon concepts</h1>
+  <p class="sub">Directions for the menu bar icon (template, 16&thinsp;pt) and matching app icon. F and G are round-2 riffs on the fan: three 4:3 windows, messy vs neat. Judge the menu bar rows at arm's length — that's the real size.</p>
+
+  <!-- ======== SVG defs: menu bar marks, 16x16, currentColor ======== -->
+  <svg width="0" height="0" style="position:absolute">
+    <defs>
+      <!-- A: fanned sheets -->
+      <symbol id="m-fan" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round">
+        <g transform="rotate(-26 8 12.4)"><rect x="5.9" y="2.6" width="4.2" height="9.4" rx="0.9"/></g>
+        <g transform="rotate(26 8 12.4)"><rect x="5.9" y="2.6" width="4.2" height="9.4" rx="0.9"/></g>
+        <rect x="5.9" y="2.2" width="4.2" height="9.8" rx="0.9" fill="var(--sheet-fill, transparent)"/>
+      </symbol>
+      <!-- B: riffle bridge -->
+      <symbol id="m-bridge" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round">
+        <path d="M2 3.2 C4.8 4.4 7 7.6 7.6 12.4"/>
+        <path d="M1.6 6.4 C4 7.4 5.9 9.6 6.6 12.6"/>
+        <path d="M14 3.2 C11.2 4.4 9 7.6 8.4 12.4"/>
+        <path d="M14.4 6.4 C12 7.4 10.1 9.6 9.4 12.6"/>
+        <path d="M4.6 13.4 h6.8" stroke-width="1.5"/>
+      </symbol>
+      <!-- C: window + swipe chevrons -->
+      <symbol id="m-window" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round">
+        <rect x="1.4" y="2.8" width="13.2" height="10.4" rx="1.6"/>
+        <path d="M1.4 5.7 H14.6"/>
+        <path d="M5.4 7.9 l2 1.8 -2 1.8"/>
+        <path d="M8.8 7.9 l2 1.8 -2 1.8"/>
+      </symbol>
+      <!-- D: page flip + motion lines -->
+      <symbol id="m-pageflip" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round">
+        <path d="M7.2 2.6 h4.1 l3.1 3.1 v6.7 a1.1 1.1 0 0 1 -1.1 1.1 h-6.1 a1.1 1.1 0 0 1 -1.1 -1.1 z"/>
+        <path d="M11.3 2.8 v2.9 h2.9"/>
+        <path d="M1.6 4.9 h3.1"/>
+        <path d="M1.6 8 h3.6"/>
+        <path d="M1.6 11.1 h3.1"/>
+      </symbol>
+      <!-- E: offset stack -->
+      <symbol id="m-stack" viewBox="0 0 16 16" fill="currentColor">
+        <rect x="1.4" y="2.9" width="8.6" height="2.5" rx="1.25"/>
+        <rect x="3.7" y="6.75" width="8.6" height="2.5" rx="1.25"/>
+        <rect x="6" y="10.6" width="8.6" height="2.5" rx="1.25"/>
+      </symbol>
+
+      <!-- F: stacked windows, messy (fill knocks out what's behind, like a template alpha cutout) -->
+      <symbol id="m-winmessy" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round">
+        <g transform="rotate(-9 6.5 5.4)"><rect x="1.7" y="1.8" width="9.6" height="7.2" rx="1.2" fill="var(--knockout)"/></g>
+        <g transform="rotate(7 10.1 7)"><rect x="5.4" y="3.4" width="9.4" height="7.1" rx="1.2" fill="var(--knockout)"/></g>
+        <rect x="2.8" y="6.9" width="10.4" height="7.8" rx="1.3" fill="var(--knockout)"/>
+        <path d="M2.8 9.4 h10.4"/>
+      </symbol>
+      <!-- F variant: messy stack, no title bar line -->
+      <symbol id="m-winmessy-plain" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round">
+        <g transform="rotate(-9 6.5 5.4)"><rect x="1.7" y="1.8" width="9.6" height="7.2" rx="1.2" fill="var(--knockout)"/></g>
+        <g transform="rotate(7 10.1 7)"><rect x="5.4" y="3.4" width="9.4" height="7.1" rx="1.2" fill="var(--knockout)"/></g>
+        <rect x="2.8" y="6.9" width="10.4" height="7.8" rx="1.3" fill="var(--knockout)"/>
+      </symbol>
+      <!-- F variant: messy stack, traffic lights only -->
+      <symbol id="m-winmessy-dots" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round">
+        <g transform="rotate(-9 6.5 5.4)"><rect x="1.7" y="1.8" width="9.6" height="7.2" rx="1.2" fill="var(--knockout)"/></g>
+        <g transform="rotate(7 10.1 7)"><rect x="5.4" y="3.4" width="9.4" height="7.1" rx="1.2" fill="var(--knockout)"/></g>
+        <rect x="2.8" y="6.9" width="10.4" height="7.8" rx="1.3" fill="var(--knockout)"/>
+        <g fill="currentColor" stroke="none">
+          <circle cx="4.7" cy="8.9" r="0.6"/>
+          <circle cx="6.6" cy="8.9" r="0.6"/>
+          <circle cx="8.5" cy="8.9" r="0.6"/>
+        </g>
+      </symbol>
+      <!-- G: stacked windows, neat cascade -->
+      <symbol id="m-winneat" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round">
+        <rect x="1.6" y="1.6" width="10" height="7.5" rx="1.2" fill="var(--knockout)"/>
+        <rect x="3.3" y="3.9" width="10" height="7.5" rx="1.2" fill="var(--knockout)"/>
+        <rect x="5" y="6.2" width="10" height="7.5" rx="1.2" fill="var(--knockout)"/>
+        <path d="M5 8.6 h10"/>
+      </symbol>
+
+      <!-- neighbours: wifi, battery -->
+      <symbol id="m-wifi" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+        <path d="M2 6.2 a9 9 0 0 1 12 0"/>
+        <path d="M4.2 8.8 a6 6 0 0 1 7.6 0"/>
+        <path d="M6.4 11.3 a3 3 0 0 1 3.2 0"/>
+        <circle cx="8" cy="13" r="0.4" fill="currentColor"/>
+      </symbol>
+      <symbol id="m-batt" viewBox="0 0 24 16" fill="none" stroke="currentColor" stroke-width="1.2">
+        <rect x="1" y="4" width="19" height="8.4" rx="2.4"/>
+        <rect x="2.6" y="5.6" width="13" height="5.2" rx="1.2" fill="currentColor" stroke="none"/>
+        <path d="M21.4 6.8 a2 2 0 0 1 0 2.8" stroke-width="1.4"/>
+      </symbol>
+
+      <!-- ======== app icon backgrounds + marks (100x100) ======== -->
+      <linearGradient id="g-indigo" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6d6bf0"/><stop offset="1" stop-color="#3a37b8"/></linearGradient>
+      <linearGradient id="g-orange" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffb340"/><stop offset="1" stop-color="#f07800"/></linearGradient>
+      <linearGradient id="g-blue"   x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3ea2ff"/><stop offset="1" stop-color="#0a5fd6"/></linearGradient>
+      <linearGradient id="g-teal"   x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4fd6c4"/><stop offset="1" stop-color="#0e9c8a"/></linearGradient>
+      <linearGradient id="g-slate"  x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5a6474"/><stop offset="1" stop-color="#2c333e"/></linearGradient>
+      <linearGradient id="g-pink"   x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff7d9c"/><stop offset="1" stop-color="#e0355f"/></linearGradient>
+      <linearGradient id="g-cyan"   x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#40c8e0"/><stop offset="1" stop-color="#0e7fa8"/></linearGradient>
+
+      <!-- A app: five fanned sheets -->
+      <symbol id="a-fan" viewBox="0 0 100 100">
+        <rect width="100" height="100" fill="url(#g-indigo)"/>
+        <g>
+          <g transform="rotate(-40 50 76)"><rect x="38" y="18" width="24" height="56" rx="5" fill="#fff" opacity=".35"/></g>
+          <g transform="rotate(-20 50 76)"><rect x="38" y="16" width="24" height="58" rx="5" fill="#fff" opacity=".55"/></g>
+          <g transform="rotate(20 50 76)"><rect x="38" y="16" width="24" height="58" rx="5" fill="#fff" opacity=".55"/></g>
+          <g transform="rotate(40 50 76)"><rect x="38" y="18" width="24" height="56" rx="5" fill="#fff" opacity=".35"/></g>
+          <rect x="38" y="13" width="24" height="61" rx="5" fill="#fff"/>
+          <g stroke="#5d5bd8" stroke-width="2.6" stroke-linecap="round" opacity=".55">
+            <path d="M43 24 h14"/><path d="M43 32 h14"/><path d="M43 40 h9"/>
+          </g>
+        </g>
+      </symbol>
+      <!-- B app: riffle bridge -->
+      <symbol id="a-bridge" viewBox="0 0 100 100">
+        <rect width="100" height="100" fill="url(#g-orange)"/>
+        <g fill="none" stroke="#fff" stroke-linecap="round">
+          <path d="M14 22 C32 30 44 48 47 76" stroke-width="6"/>
+          <path d="M11 40 C27 46 38 58 43 78" stroke-width="6" opacity=".7"/>
+          <path d="M86 22 C68 30 56 48 53 76" stroke-width="6"/>
+          <path d="M89 40 C73 46 62 58 57 78" stroke-width="6" opacity=".7"/>
+          <path d="M28 84 h44" stroke-width="7"/>
+        </g>
+      </symbol>
+      <!-- C app: window + swipe -->
+      <symbol id="a-window" viewBox="0 0 100 100">
+        <rect width="100" height="100" fill="url(#g-blue)"/>
+        <rect x="16" y="24" width="68" height="52" rx="9" fill="none" stroke="#fff" stroke-width="6"/>
+        <path d="M16 39 H84" stroke="#fff" stroke-width="5"/>
+        <g fill="none" stroke="#fff" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M38 49 l10 9 -10 9"/>
+          <path d="M54 49 l10 9 -10 9"/>
+        </g>
+      </symbol>
+      <!-- D app: page flip -->
+      <symbol id="a-pageflip" viewBox="0 0 100 100">
+        <rect width="100" height="100" fill="url(#g-teal)"/>
+        <path d="M42 20 h22 l16 16 v36 a7 7 0 0 1 -7 7 h-31 a7 7 0 0 1 -7 -7 z" fill="#fff"/>
+        <path d="M64 20 v16 h16 z" fill="#bfe9e2"/>
+        <g stroke="#fff" stroke-width="5.5" stroke-linecap="round">
+          <path d="M12 32 h16"/><path d="M12 48 h19"/><path d="M12 64 h16"/>
+        </g>
+        <g stroke="#169a88" stroke-width="3.4" stroke-linecap="round" opacity=".65">
+          <path d="M48 46 h18"/><path d="M48 55 h18"/><path d="M48 64 h11"/>
+        </g>
+      </symbol>
+      <!-- E app: offset stack -->
+      <symbol id="a-stack" viewBox="0 0 100 100">
+        <rect width="100" height="100" fill="url(#g-slate)"/>
+        <rect x="14" y="24" width="46" height="13" rx="6.5" fill="#fff" opacity=".65"/>
+        <rect x="27" y="44" width="46" height="13" rx="6.5" fill="#fff" opacity=".85"/>
+        <rect x="40" y="64" width="46" height="13" rx="6.5" fill="#fff"/>
+      </symbol>
+      <!-- F app: stacked windows, messy -->
+      <symbol id="a-winmessy" viewBox="0 0 100 100">
+        <rect width="100" height="100" fill="url(#g-pink)"/>
+        <g transform="rotate(-10 36 32)"><rect x="12" y="14" width="48" height="36" rx="6" fill="#f7b8c6"/></g>
+        <g transform="rotate(8 66 40)"><rect x="42" y="22" width="48" height="36" rx="6" fill="#fbdce3"/></g>
+        <rect x="20" y="42" width="56" height="42" rx="7" fill="#fff"/>
+        <path d="M20 55 h56" stroke="#e0355f" stroke-width="2.5" opacity=".45"/>
+        <circle cx="27" cy="48.5" r="2.4" fill="#e0355f" opacity=".85"/>
+        <circle cx="34" cy="48.5" r="2.4" fill="#e0355f" opacity=".55"/>
+        <circle cx="41" cy="48.5" r="2.4" fill="#e0355f" opacity=".3"/>
+      </symbol>
+      <!-- G app: stacked windows, neat cascade -->
+      <symbol id="a-winneat" viewBox="0 0 100 100">
+        <rect width="100" height="100" fill="url(#g-cyan)"/>
+        <rect x="14" y="12" width="56" height="42" rx="7" fill="#bfeef8"/>
+        <rect x="22" y="24" width="56" height="42" rx="7" fill="#e2f7fc"/>
+        <rect x="30" y="36" width="56" height="42" rx="7" fill="#fff"/>
+        <path d="M30 49 h56" stroke="#0e7fa8" stroke-width="2.5" opacity=".45"/>
+        <circle cx="37" cy="42.5" r="2.4" fill="#0e7fa8" opacity=".85"/>
+        <circle cx="44" cy="42.5" r="2.4" fill="#0e7fa8" opacity=".55"/>
+        <circle cx="51" cy="42.5" r="2.4" fill="#0e7fa8" opacity=".3"/>
+      </symbol>
+    </defs>
+  </svg>
+
+  <!-- ======== all candidates in one bar ======== -->
+  <h2>All of them, side by side</h2>
+  <div class="barwrap">
+    <div class="menubar light">
+      <span class="candidate"><span class="label">A</span><svg class="icon"><use href="#m-fan"/></svg></span>
+      <span class="candidate"><span class="label">F</span><svg class="icon"><use href="#m-winmessy"/></svg></span>
+      <span class="candidate"><span class="label">G</span><svg class="icon"><use href="#m-winneat"/></svg></span>
+      <span class="candidate"><span class="label">B</span><svg class="icon"><use href="#m-bridge"/></svg></span>
+      <span class="candidate"><span class="label">C</span><svg class="icon"><use href="#m-window"/></svg></span>
+      <span class="candidate"><span class="label">D</span><svg class="icon"><use href="#m-pageflip"/></svg></span>
+      <span class="candidate"><span class="label">E</span><svg class="icon"><use href="#m-stack"/></svg></span>
+      <svg class="icon"><use href="#m-wifi"/></svg>
+      <svg class="icon" style="width:24px"><use href="#m-batt"/></svg>
+      <span class="clock">Tue 4 Aug&nbsp;&nbsp;09:41</span>
+    </div>
+    <div class="menubar dark">
+      <span class="candidate"><svg class="icon"><use href="#m-fan"/></svg></span>
+      <span class="candidate"><svg class="icon"><use href="#m-winmessy"/></svg></span>
+      <span class="candidate"><svg class="icon"><use href="#m-winneat"/></svg></span>
+      <span class="candidate"><svg class="icon"><use href="#m-bridge"/></svg></span>
+      <span class="candidate"><svg class="icon"><use href="#m-window"/></svg></span>
+      <span class="candidate"><svg class="icon"><use href="#m-pageflip"/></svg></span>
+      <span class="candidate"><svg class="icon"><use href="#m-stack"/></svg></span>
+      <svg class="icon"><use href="#m-wifi"/></svg>
+      <svg class="icon" style="width:24px"><use href="#m-batt"/></svg>
+      <span class="clock">Tue 4 Aug&nbsp;&nbsp;09:41</span>
+    </div>
+  </div>
+
+  <!-- ======== F variants ======== -->
+  <h2>F variants — title bar line &amp; colours</h2>
+  <section class="card">
+    <h3>Menu bar: title bar line vs traffic lights vs plain</h3>
+    <p class="why">Same messy stack, three treatments of the front window: divider line, three dots only, or nothing.</p>
+    <div class="row">
+      <div class="cell">
+        <span class="cap">Menu bar, 1×</span>
+        <div class="menubar light minibar" style="justify-content:flex-start; gap:18px; padding-top:0;">
+          <span class="candidate"><span class="label">line</span><svg class="icon"><use href="#m-winmessy"/></svg></span>
+          <span class="candidate"><span class="label">dots</span><svg class="icon"><use href="#m-winmessy-dots"/></svg></span>
+          <span class="candidate"><span class="label">plain</span><svg class="icon"><use href="#m-winmessy-plain"/></svg></span>
+        </div>
+        <div class="menubar dark minibar" style="justify-content:flex-start; gap:18px;">
+          <span class="candidate"><svg class="icon"><use href="#m-winmessy"/></svg></span>
+          <span class="candidate"><svg class="icon"><use href="#m-winmessy-dots"/></svg></span>
+          <span class="candidate"><svg class="icon"><use href="#m-winmessy-plain"/></svg></span>
+        </div>
+      </div>
+      <div class="cell">
+        <span class="cap">Zoomed — line</span>
+        <div class="zoom">
+          <div class="zoombox light"><svg class="icon"><use href="#m-winmessy"/></svg></div>
+          <div class="zoombox dark"><svg class="icon"><use href="#m-winmessy"/></svg></div>
+        </div>
+      </div>
+      <div class="cell">
+        <span class="cap">Zoomed — dots</span>
+        <div class="zoom">
+          <div class="zoombox light"><svg class="icon"><use href="#m-winmessy-dots"/></svg></div>
+          <div class="zoombox dark"><svg class="icon"><use href="#m-winmessy-dots"/></svg></div>
+        </div>
+      </div>
+      <div class="cell">
+        <span class="cap">Zoomed — plain</span>
+        <div class="zoom">
+          <div class="zoombox light"><svg class="icon"><use href="#m-winmessy-plain"/></svg></div>
+          <div class="zoombox dark"><svg class="icon"><use href="#m-winmessy-plain"/></svg></div>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section class="card">
+    <h3>App icon: colours × detail</h3>
+    <p class="why">Three treatments per colour: divider + accent dots, real traffic lights only (red/yellow/green, no line), and plain sheets. Small version next to each is the 30&thinsp;px System Settings size.</p>
+    <div id="fgrid" class="vgrid"></div>
+  </section>
+
+  <!-- ======== per-concept cards (generated) ======== -->
+  <h2>Concepts</h2>
+  <div id="cards"></div>
+
+  <script>
+    // ---- F colour/detail variants ----
+    const palettes = [
+      { id: 'pink',     name: 'Pink',     g0: '#ff7d9c', g1: '#e0355f', back: '#f7b8c6', mid: '#fbdce3', accent: '#e0355f' },
+      { id: 'indigo',   name: 'Indigo',   g0: '#6d6bf0', g1: '#3a37b8', back: '#c3c2f5', mid: '#e0dffb', accent: '#4340c2' },
+      { id: 'blue',     name: 'Blue',     g0: '#3ea2ff', g1: '#0a5fd6', back: '#b9dcff', mid: '#dceeff', accent: '#0a5fd6' },
+      { id: 'teal',     name: 'Teal',     g0: '#4fd6c4', g1: '#0e9c8a', back: '#b5ece4', mid: '#d9f6f2', accent: '#0e9c8a' },
+      { id: 'orange',   name: 'Orange',   g0: '#ffb340', g1: '#f07800', back: '#ffdcae', mid: '#ffeed6', accent: '#e06d00' },
+      { id: 'graphite', name: 'Graphite', g0: '#5a6474', g1: '#2c333e', back: '#c2c8d1', mid: '#e0e4e9', accent: '#3c4450' },
+    ];
+
+    function messySvg(p, mode, cls, uid) {
+      // mode: 'bar' = divider + accent dots, 'dots' = real traffic lights only, 'plain' = nothing
+      let detail = '';
+      if (mode === 'bar') {
+        detail = `
+        <path d="M20 55 h56" stroke="${p.accent}" stroke-width="2.5" opacity=".45"/>
+        <circle cx="27" cy="48.5" r="2.4" fill="${p.accent}" opacity=".85"/>
+        <circle cx="34" cy="48.5" r="2.4" fill="${p.accent}" opacity=".55"/>
+        <circle cx="41" cy="48.5" r="2.4" fill="${p.accent}" opacity=".3"/>`;
+      } else if (mode === 'dots') {
+        detail = `
+        <circle cx="27" cy="49" r="2.6" fill="#ff5f57"/>
+        <circle cx="34.5" cy="49" r="2.6" fill="#febc2e"/>
+        <circle cx="42" cy="49" r="2.6" fill="#28c840"/>`;
+      }
+      return `<svg class="${cls}" viewBox="0 0 100 100">
+        <defs><linearGradient id="fg-${uid}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="${p.g0}"/><stop offset="1" stop-color="${p.g1}"/>
+        </linearGradient></defs>
+        <rect width="100" height="100" fill="url(#fg-${uid})"/>
+        <g transform="rotate(-10 36 32)"><rect x="12" y="14" width="48" height="36" rx="6" fill="${p.back}"/></g>
+        <g transform="rotate(8 66 40)"><rect x="42" y="22" width="48" height="36" rx="6" fill="${p.mid}"/></g>
+        <rect x="20" y="42" width="56" height="42" rx="7" fill="#fff"/>
+        ${detail}
+      </svg>`;
+    }
+
+    const fgrid = document.getElementById('fgrid');
+    for (const p of palettes) {
+      const cell = document.createElement('div');
+      cell.className = 'vcell';
+      cell.innerHTML = `
+        <span class="cap">${p.name} — title bar</span>
+        <div class="pair">
+          ${messySvg(p, 'bar', 'appicon big', p.id + '-bar')}
+          ${messySvg(p, 'bar', 'appicon small', p.id + '-bar-s')}
+        </div>
+        <span class="cap">${p.name} — traffic lights</span>
+        <div class="pair">
+          ${messySvg(p, 'dots', 'appicon big', p.id + '-dots')}
+          ${messySvg(p, 'dots', 'appicon small', p.id + '-dots-s')}
+        </div>
+        <span class="cap">${p.name} — plain</span>
+        <div class="pair">
+          ${messySvg(p, 'plain', 'appicon big', p.id + '-plain')}
+          ${messySvg(p, 'plain', 'appicon small', p.id + '-plain-s')}
+        </div>`;
+      fgrid.appendChild(cell);
+    }
+
+    const concepts = [
+      { key: 'A', name: 'Fan', mark: 'm-fan', app: 'a-fan',
+        why: 'Sheets of paper fanned from a pivot — the most literal “riffle”. Distinctive silhouette, no window cliché.' },
+      { key: 'F', name: 'Stacked windows — messy', mark: 'm-winmessy', app: 'a-winmessy',
+        why: 'Round 2: three 4:3 windows tossed on a pile, front one with a title bar. The fan idea, but made of windows.' },
+      { key: 'G', name: 'Stacked windows — neat', mark: 'm-winneat', app: 'a-winneat',
+        why: 'Round 2: the same three windows in a tidy diagonal cascade. Calmer, classic layered-windows glyph.' },
+      { key: 'B', name: 'Riffle bridge', mark: 'm-bridge', app: 'a-bridge',
+        why: 'Side view of a card riffle-shuffle, two halves arcing together. Evokes motion; riskiest at 16 pt.' },
+      { key: 'C', name: 'Window + swipe', mark: 'm-window', app: 'a-window',
+        why: 'Says what the app does: a window plus two swipe chevrons. Least poetic, most self-explanatory.' },
+      { key: 'D', name: 'Page flip', mark: 'm-pageflip', app: 'a-pageflip',
+        why: 'A page with a dog-ear and speed lines — a single sheet mid-riffle. Familiar glyph language.' },
+      { key: 'E', name: 'Offset stack', mark: 'm-stack', app: 'a-stack',
+        why: 'Three staggered bars: papers mid-shuffle, abstracted. Boldest and most legible at tiny sizes.' },
+    ];
+
+    const cards = document.getElementById('cards');
+    for (const c of concepts) {
+      const el = document.createElement('section');
+      el.className = 'card';
+      el.innerHTML = `
+        <h3>${c.key} — ${c.name}</h3>
+        <p class="why">${c.why}</p>
+        <div class="row">
+          <div class="cell">
+            <span class="cap">Menu bar, 1×</span>
+            <div class="menubar light minibar">
+              <svg class="icon"><use href="#${c.mark}"/></svg>
+              <svg class="icon"><use href="#m-wifi"/></svg>
+              <svg class="icon" style="width:24px"><use href="#m-batt"/></svg>
+              <span class="clock">09:41</span>
+            </div>
+            <div class="menubar dark minibar">
+              <svg class="icon"><use href="#${c.mark}"/></svg>
+              <svg class="icon"><use href="#m-wifi"/></svg>
+              <svg class="icon" style="width:24px"><use href="#m-batt"/></svg>
+              <span class="clock">09:41</span>
+            </div>
+          </div>
+          <div class="cell">
+            <span class="cap">Zoomed</span>
+            <div class="zoom">
+              <div class="zoombox light"><svg class="icon"><use href="#${c.mark}"/></svg></div>
+              <div class="zoombox dark"><svg class="icon"><use href="#${c.mark}"/></svg></div>
+            </div>
+          </div>
+          <div class="cell">
+            <span class="cap">App icon</span>
+            <svg class="appicon big" viewBox="0 0 100 100"><use href="#${c.app}"/></svg>
+          </div>
+          <div class="cell">
+            <span class="cap">System Settings › Accessibility</span>
+            <div class="settings">
+              <div class="hdr">Allow the applications below to control your computer.</div>
+              <div class="row2">
+                <div class="genapp" style="background:linear-gradient(#8e8e93,#5a5a5e)">⌘</div>
+                <span class="name">SomeOtherApp</span>
+                <div class="toggle off"></div>
+              </div>
+              <div class="row2">
+                <svg class="appicon small" viewBox="0 0 100 100"><use href="#${c.app}"/></svg>
+                <span class="name">Riffle</span>
+                <div class="toggle"></div>
+              </div>
+            </div>
+          </div>
+        </div>`;
+      cards.appendChild(el);
+    }
+  </script>
+</main>
+</body>
+</html>
