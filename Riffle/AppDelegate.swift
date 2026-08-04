@@ -12,8 +12,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var statusItemController: StatusItemController?
+    private let permissionMonitor = AccessibilityPermissionMonitor()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItemController = StatusItemController()
+        permissionMonitor.start()
     }
 }
