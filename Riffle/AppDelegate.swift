@@ -2,10 +2,12 @@ import AppKit
 
 @main
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    // NSApplication.delegate is unowned; this keeps the delegate alive for the app's lifetime.
+    private static let shared = AppDelegate()
+
     static func main() {
         let app = NSApplication.shared
-        let delegate = AppDelegate()
-        app.delegate = delegate
+        app.delegate = shared
         app.run()
     }
 
