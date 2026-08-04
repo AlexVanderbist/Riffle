@@ -2,14 +2,16 @@ import CoreGraphics
 import Foundation
 import os
 
-/// A session-level active event tap on `scrollWheel` events. The handler
+/// A session-level active event tap on scroll and gesture events. The handler
 /// returns nil to consume an event — that is the entire capture mechanism.
 ///
 /// macOS disables active taps that respond too slowly (or on user request);
 /// the tap re-enables itself from the disable callbacks, with a periodic
 /// is-enabled watchdog as backstop.
-final class ScrollEventTap {
-    var handler: ((CGEvent) -> Unmanaged<CGEvent>?)?
+final class GestureEventTap {
+    var handler: ((CGEventType, CGEvent) -> Unmanaged<CGEvent>?)?
+
+    static let gestureEventType: UInt32 = 29
 
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
@@ -21,7 +23,7 @@ final class ScrollEventTap {
     func start() {
         guard tap == nil else { return }
 
-        let mask: CGEventMask = 1 << CGEventType.scrollWheel.rawValue
+        let mask: CGEventMask = (1 << CGEventType.scrollWheel.rawValue) | (1 << Self.gestureEventType)
         guard let port = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: .headInsertEventTap,
@@ -29,7 +31,7 @@ final class ScrollEventTap {
             eventsOfInterest: mask,
             callback: { _, type, event, userInfo in
                 guard let userInfo else { return Unmanaged.passUnretained(event) }
-                let tap = Unmanaged<ScrollEventTap>.fromOpaque(userInfo).takeUnretainedValue()
+                let tap = Unmanaged<GestureEventTap>.fromOpaque(userInfo).takeUnretainedValue()
                 // The tap's run loop source lives on the main run loop, so
                 // events always arrive on the main thread.
                 return MainActor.assumeIsolated { tap.handle(type: type, event: event) }
@@ -69,7 +71,7 @@ final class ScrollEventTap {
             logger.warning("Event tap was disabled by macOS (\(type.rawValue)) — re-enabled")
             return Unmanaged.passUnretained(event)
         }
-        return handler?(event) ?? Unmanaged.passUnretained(event)
+        return handler?(type, event) ?? Unmanaged.passUnretained(event)
     }
 
     private func startWatchdog() {

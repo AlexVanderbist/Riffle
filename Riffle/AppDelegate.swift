@@ -13,7 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var statusItemController: StatusItemController?
     private let permissionMonitor = AccessibilityPermissionMonitor()
-    private let moveGestureController = MoveGestureController()
+    private let gestureController = GestureController()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Unit tests inject into this app as their host; don't prompt for
@@ -22,19 +22,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         statusItemController = StatusItemController()
 
-        moveGestureController.onAXFailure = { [weak permissionMonitor] in
+        gestureController.onAXFailure = { [weak permissionMonitor] in
             permissionMonitor?.recheck()
         }
-        permissionMonitor.trustDidChange = { [weak moveGestureController] trusted in
+        permissionMonitor.trustDidChange = { [weak gestureController] trusted in
             if trusted {
-                moveGestureController?.start()
+                gestureController?.start()
             } else {
-                moveGestureController?.stop()
+                gestureController?.stop()
             }
         }
         permissionMonitor.start()
         if permissionMonitor.isTrusted {
-            moveGestureController.start()
+            gestureController.start()
         }
     }
 }

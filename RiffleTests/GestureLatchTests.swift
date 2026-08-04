@@ -1,19 +1,20 @@
 import XCTest
 @testable import Riffle
 
-final class MoveGestureLatchTests: XCTestCase {
-    typealias Phase = MoveGestureLatch.ScrollPhase
-    typealias Momentum = MoveGestureLatch.MomentumPhase
+final class GestureLatchTests: XCTestCase {
+    typealias Phase = GestureLatch.ScrollPhase
+    typealias Momentum = GestureLatch.MomentumPhase
+    typealias Magnify = GestureLatch.MagnifyPhase
 
-    var latch = MoveGestureLatch()
+    var latch = GestureLatch()
 
     private func handle(
         isContinuous: Bool = true,
         phase: Int64 = Phase.none,
         momentum: Int64 = Momentum.none,
         chord: Bool = false
-    ) -> MoveGestureLatch.Action {
-        latch.handle(isContinuous: isContinuous, scrollPhase: phase, momentumPhase: momentum, chordMatches: chord)
+    ) -> GestureLatch.ScrollAction {
+        latch.handleScroll(isContinuous: isContinuous, scrollPhase: phase, momentumPhase: momentum, chordMatches: chord)
     }
 
     func testChordedStreamIsCapturedThroughMomentumEnd() {
@@ -24,7 +25,7 @@ final class MoveGestureLatchTests: XCTestCase {
         XCTAssertEqual(handle(momentum: Momentum.begin), .discard)
         XCTAssertEqual(handle(momentum: Momentum.continuing), .discard)
         XCTAssertEqual(handle(momentum: Momentum.end), .finishStream)
-        XCTAssertFalse(latch.isCapturing)
+        XCTAssertFalse(latch.isCapturingScroll)
     }
 
     func testStreamWithoutChordPassesThroughEntirely() {
@@ -76,5 +77,33 @@ final class MoveGestureLatchTests: XCTestCase {
         XCTAssertEqual(handle(phase: Phase.began, chord: true), .beginMove)
         XCTAssertEqual(handle(phase: Phase.changed, chord: true), .applyMove)
         XCTAssertEqual(handle(phase: Phase.began, chord: true), .beginMove)
+    }
+
+    func testMoveGestureNeverSwitchesToResize() {
+        XCTAssertEqual(handle(phase: Phase.began, chord: true), .beginMove)
+        XCTAssertEqual(latch.handleMagnify(phase: Magnify.began, chordMatches: true), .discard)
+        XCTAssertEqual(latch.handleMagnify(phase: Magnify.changed, chordMatches: true), .discard)
+        XCTAssertEqual(latch.handleMagnify(phase: Magnify.ended, chordMatches: true), .discard)
+        XCTAssertEqual(handle(phase: Phase.changed, chord: true), .applyMove)
+    }
+
+    func testResizeGestureNeverSwitchesToMove() {
+        XCTAssertEqual(latch.handleMagnify(phase: Magnify.began, chordMatches: true), .beginResize)
+        XCTAssertEqual(handle(phase: Phase.began, chord: true), .discard)
+        XCTAssertEqual(handle(phase: Phase.changed, chord: true), .discard)
+        XCTAssertEqual(latch.handleMagnify(phase: Magnify.changed, chordMatches: true), .applyResize)
+        XCTAssertEqual(latch.handleMagnify(phase: Magnify.ended, chordMatches: true), .liftFingers)
+    }
+
+    func testMagnifyStreamWithoutChordPassesThroughEntirely() {
+        XCTAssertEqual(latch.handleMagnify(phase: Magnify.began, chordMatches: false), .passThrough)
+        XCTAssertEqual(latch.handleMagnify(phase: Magnify.changed, chordMatches: true), .passThrough)
+        XCTAssertEqual(latch.handleMagnify(phase: Magnify.ended, chordMatches: true), .passThrough)
+    }
+
+    func testReleasingChordMidResizeKeepsConsuming() {
+        XCTAssertEqual(latch.handleMagnify(phase: Magnify.began, chordMatches: true), .beginResize)
+        XCTAssertEqual(latch.handleMagnify(phase: Magnify.changed, chordMatches: false), .applyResize)
+        XCTAssertEqual(latch.handleMagnify(phase: Magnify.ended, chordMatches: false), .liftFingers)
     }
 }

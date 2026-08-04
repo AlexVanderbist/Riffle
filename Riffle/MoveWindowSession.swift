@@ -18,9 +18,7 @@ nonisolated final class MoveWindowSession: @unchecked Sendable {
     /// the session has shut itself down.
     var onInvalidated: (@MainActor (AXError) -> Void)?
 
-    private let window: AXUIElement
-    private let appElement: AXUIElement
-    private let enhancedUIWasEnabled: Bool
+    private let targetWindow: TargetWindow
     private let startPosition: CGPoint
     private let startCursor: CGPoint
     private let writeInterval: TimeInterval
@@ -38,40 +36,21 @@ nonisolated final class MoveWindowSession: @unchecked Sendable {
 
     // AX calls into a hung app block until this timeout instead of wedging
     // the caller for the default several seconds.
-    private static let axMessagingTimeout: Float = 0.25
-
-    private static let enhancedUserInterfaceAttribute = "AXEnhancedUserInterface" as CFString
-
     /// Hit-tests the window under `cursor` and prepares it for a Move Gesture.
     /// Returns nil when there is no window or it refuses to report its frame;
     /// the gesture is still consumed by the caller, it just moves nothing.
     static func begin(at cursor: CGPoint, writeInterval: TimeInterval) -> MoveWindowSession? {
-        guard let window = windowElement(at: cursor) else {
+        guard let element = TargetWindow.element(at: cursor) else {
             logger.info("No window under the cursor — move gesture targets nothing")
             return nil
         }
-        guard let position = pointAttribute(of: window, kAXPositionAttribute) else {
+        guard let position = TargetWindow.position(of: element) else {
             logger.warning("Target window refuses to report its position — move gesture targets nothing")
             return nil
         }
 
-        AXUIElementSetMessagingTimeout(window, axMessagingTimeout)
-
-        var pid: pid_t = 0
-        AXUIElementGetPid(window, &pid)
-        let appElement = AXUIElementCreateApplication(pid)
-
-        // AXEnhancedUserInterface makes position writes animate to wrong places
-        // (Chrome and friends); disable it for the gesture, restore after.
-        let enhancedUIWasEnabled = boolAttribute(of: appElement, enhancedUserInterfaceAttribute as String)
-        if enhancedUIWasEnabled {
-            AXUIElementSetAttributeValue(appElement, enhancedUserInterfaceAttribute, kCFBooleanFalse)
-        }
-
         return MoveWindowSession(
-            window: window,
-            appElement: appElement,
-            enhancedUIWasEnabled: enhancedUIWasEnabled,
+            targetWindow: TargetWindow(element: element),
             startPosition: position,
             startCursor: cursor,
             writeInterval: writeInterval
@@ -79,16 +58,12 @@ nonisolated final class MoveWindowSession: @unchecked Sendable {
     }
 
     private init(
-        window: AXUIElement,
-        appElement: AXUIElement,
-        enhancedUIWasEnabled: Bool,
+        targetWindow: TargetWindow,
         startPosition: CGPoint,
         startCursor: CGPoint,
         writeInterval: TimeInterval
     ) {
-        self.window = window
-        self.appElement = appElement
-        self.enhancedUIWasEnabled = enhancedUIWasEnabled
+        self.targetWindow = targetWindow
         self.startPosition = startPosition
         self.startCursor = startCursor
         self.writeInterval = writeInterval
@@ -165,9 +140,7 @@ nonisolated final class MoveWindowSession: @unchecked Sendable {
     }
 
     private func write(position: CGPoint) -> AXError {
-        var position = position
-        guard let value = AXValueCreate(.cgPoint, &position) else { return .failure }
-        return AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, value)
+        targetWindow.set(position: position)
     }
 
     /// The cursor moves along with the window, keeping the grab point stable.
@@ -197,49 +170,6 @@ nonisolated final class MoveWindowSession: @unchecked Sendable {
 
     /// Runs on `axQueue` so the restore lands after any in-flight write.
     private func restoreEnhancedUIIfNeeded() {
-        guard enhancedUIWasEnabled else { return }
-        AXUIElementSetAttributeValue(appElement, Self.enhancedUserInterfaceAttribute, kCFBooleanTrue)
-    }
-
-    // MARK: - AX helpers
-
-    /// Resolves the AX element under `location` (top-left-origin global
-    /// coordinates) to its containing window.
-    private static func windowElement(at location: CGPoint) -> AXUIElement? {
-        let systemWide = AXUIElementCreateSystemWide()
-        // Bound the hit-test too: it runs in the tap callback, and a hung app
-        // under the cursor must not stall event delivery for seconds.
-        AXUIElementSetMessagingTimeout(systemWide, axMessagingTimeout)
-        var element: AXUIElement?
-        guard AXUIElementCopyElementAtPosition(systemWide, Float(location.x), Float(location.y), &element) == .success,
-              let element else { return nil }
-
-        if stringAttribute(of: element, kAXRoleAttribute) == kAXWindowRole { return element }
-
-        var windowRef: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, kAXWindowAttribute as CFString, &windowRef) == .success,
-              let windowRef, CFGetTypeID(windowRef) == AXUIElementGetTypeID() else { return nil }
-        return (windowRef as! AXUIElement)
-    }
-
-    private static func pointAttribute(of element: AXUIElement, _ name: String) -> CGPoint? {
-        var ref: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, name as CFString, &ref) == .success,
-              let ref, CFGetTypeID(ref) == AXValueGetTypeID() else { return nil }
-        var point = CGPoint.zero
-        guard AXValueGetValue(ref as! AXValue, .cgPoint, &point) else { return nil }
-        return point
-    }
-
-    private static func stringAttribute(of element: AXUIElement, _ name: String) -> String? {
-        var ref: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, name as CFString, &ref) == .success else { return nil }
-        return ref as? String
-    }
-
-    private static func boolAttribute(of element: AXUIElement, _ name: String) -> Bool {
-        var ref: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, name as CFString, &ref) == .success else { return false }
-        return (ref as? Bool) ?? false
+        targetWindow.restoreEnhancedUIIfNeeded()
     }
 }
