@@ -31,4 +31,10 @@ final class ModifierChordTests: XCTestCase {
         flags.insert(CGEventFlags(rawValue: 0x20000000))
         XCTAssertTrue(chord.matches(flags))
     }
+
+    func testRemovingOnlyModifierIsRefused() {
+        let chord = ModifierChord(modifiers: [.control])
+
+        XCTAssertNil(chord.toggling(.control))
+    }
 }

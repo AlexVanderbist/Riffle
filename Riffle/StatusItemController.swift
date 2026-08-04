@@ -2,9 +2,11 @@ import AppKit
 
 final class StatusItemController: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
+    private let preferences: Preferences
 
-    override init() {
+    init(preferences: Preferences) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        self.preferences = preferences
 
         super.init()
 
@@ -18,9 +20,22 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         statusItem.menu = menu
     }
 
-    // Rebuilt on every open so later tickets can compute per-open state (e.g. checkmarks).
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
+
+        for modifier in ModifierChord.Modifier.allCases {
+            let item = NSMenuItem(
+                title: modifier.menuTitle,
+                action: #selector(toggleModifier(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = modifier
+            item.state = preferences.modifierChord.contains(modifier) ? .on : .off
+            menu.addItem(item)
+        }
+
+        menu.addItem(.separator())
 
         let exitItem = NSMenuItem(
             title: "Exit",
@@ -28,5 +43,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             keyEquivalent: ""
         )
         menu.addItem(exitItem)
+    }
+
+    @objc private func toggleModifier(_ sender: NSMenuItem) {
+        guard let modifier = sender.representedObject as? ModifierChord.Modifier else {
+            return
+        }
+
+        preferences.toggle(modifier)
+        sender.state = preferences.modifierChord.contains(modifier) ? .on : .off
     }
 }

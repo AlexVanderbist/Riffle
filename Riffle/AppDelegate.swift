@@ -13,14 +13,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var statusItemController: StatusItemController?
     private let permissionMonitor = AccessibilityPermissionMonitor()
-    private let gestureController = GestureController()
+    private let preferences = Preferences()
+    private lazy var gestureController = GestureController(preferences: preferences)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Unit tests inject into this app as their host; don't prompt for
         // permissions or install the status item during a test run.
         guard NSClassFromString("XCTestCase") == nil else { return }
 
-        statusItemController = StatusItemController()
+        statusItemController = StatusItemController(preferences: preferences)
 
         gestureController.onAXFailure = { [weak permissionMonitor] in
             permissionMonitor?.recheck()

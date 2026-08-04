@@ -13,7 +13,11 @@ final class GestureController {
     private var moveSession: MoveWindowSession?
     private var resizeSession: ResizeWindowSession?
     private var screenParametersObserver: NSObjectProtocol?
-    private let chord = ModifierChord.default
+    private let preferences: Preferences
+
+    init(preferences: Preferences) {
+        self.preferences = preferences
+    }
 
     private var writeInterval: TimeInterval {
         let fastestRefresh = NSScreen.screens.map(\.maximumFramesPerSecond).max() ?? 60
@@ -45,7 +49,7 @@ final class GestureController {
 
         let isContinuous = event.getIntegerValueField(.scrollWheelEventIsContinuous) != 0
         let scrollPhase = event.getIntegerValueField(.scrollWheelEventScrollPhase)
-        let chordMatches = chord.matches(event.flags)
+        let chordMatches = preferences.modifierChord.matches(event.flags)
         var target = TargetWindowHit.noWindow
         let action = latch.handleScroll(
             isContinuous: isContinuous,
@@ -91,7 +95,7 @@ final class GestureController {
         }
 
         let phase = GestureLatch.MagnifyPhase(rawValue: appKitEvent.phase.rawValue)
-        let chordMatches = chord.matches(event.flags)
+        let chordMatches = preferences.modifierChord.matches(event.flags)
         var target = TargetWindowHit.noWindow
         let action = latch.handleMagnify(
             phase: phase,
