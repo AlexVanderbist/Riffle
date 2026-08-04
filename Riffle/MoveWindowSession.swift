@@ -36,12 +36,16 @@ nonisolated final class MoveWindowSession: @unchecked Sendable {
 
     // AX calls into a hung app block until this timeout instead of wedging
     // the caller for the default several seconds.
-    /// Hit-tests the window under `cursor` and prepares it for a Move Gesture.
+    /// Prepares the hit-tested window under `cursor` for a Move Gesture.
     /// Returns nil when there is no window or it refuses to report its frame;
     /// the gesture is still consumed by the caller, it just moves nothing.
     @MainActor
-    static func begin(at cursor: CGPoint, writeInterval: TimeInterval) -> MoveWindowSession? {
-        guard let element = TargetWindow.element(at: cursor) else {
+    static func begin(
+        targeting element: AXUIElement?,
+        at cursor: CGPoint,
+        writeInterval: TimeInterval
+    ) -> MoveWindowSession? {
+        guard let element else {
             logger.info("No window under the cursor — move gesture targets nothing")
             return nil
         }

@@ -24,8 +24,12 @@ nonisolated final class ResizeWindowSession: @unchecked Sendable {
     private let axQueue = DispatchQueue(label: "com.alexvanderbist.Riffle.ax-resize-writes", qos: .userInteractive)
     private static let logger = Logger(subsystem: "com.alexvanderbist.Riffle", category: "resize-session")
     @MainActor
-    static func begin(at cursor: CGPoint, writeInterval: TimeInterval) -> ResizeWindowSession? {
-        guard let element = TargetWindow.element(at: cursor) else {
+    static func begin(
+        targeting element: AXUIElement?,
+        at cursor: CGPoint,
+        writeInterval: TimeInterval
+    ) -> ResizeWindowSession? {
+        guard let element else {
             logger.info("No window under the cursor — resize gesture targets nothing")
             return nil
         }

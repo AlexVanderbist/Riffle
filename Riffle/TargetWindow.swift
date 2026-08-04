@@ -1,4 +1,21 @@
+import AppKit
 import ApplicationServices
+
+nonisolated enum TargetWindowHit: @unchecked Sendable {
+    case noWindow
+    case targetWindow(AXUIElement)
+    case passThrough
+
+    var element: AXUIElement? {
+        guard case .targetWindow(let element) = self else { return nil }
+        return element
+    }
+
+    var allowsCapture: Bool {
+        if case .passThrough = self { return false }
+        return true
+    }
+}
 
 /// Cached Accessibility boundary for the Target Window and its owning app.
 nonisolated final class TargetWindow: @unchecked Sendable {
@@ -8,20 +25,92 @@ nonisolated final class TargetWindow: @unchecked Sendable {
     private let enhancedUIWasEnabled: Bool
     private static let axMessagingTimeout: Float = 0.25
     private static let enhancedUserInterfaceAttribute = "AXEnhancedUserInterface" as CFString
+    private static let fullScreenAttribute = "AXFullScreen"
+    private static let systemUIBundleIdentifiers = [
+        "com.apple.dock",
+        "com.apple.WindowManager",
+    ]
+    private static let systemUIProcessNames = ["Dock", "WindowManager"]
 
-    static func element(at location: CGPoint) -> AXUIElement? {
+    /// Hit-tests once and reports both the resolved window and whether Riffle
+    /// may consume the gesture that began over it.
+    static func captureTarget(at location: CGPoint) -> TargetWindowHit {
         let systemWide = AXUIElementCreateSystemWide()
         AXUIElementSetMessagingTimeout(systemWide, axMessagingTimeout)
         var element: AXUIElement?
-        guard AXUIElementCopyElementAtPosition(systemWide, Float(location.x), Float(location.y), &element) == .success,
-              let element else { return nil }
+        let hitTestError = AXUIElementCopyElementAtPosition(
+            systemWide,
+            Float(location.x),
+            Float(location.y),
+            &element
+        )
+        guard hitTestError == .success, let element else {
+            return hitTestError == .noValue ? .noWindow : .passThrough
+        }
 
-        if stringAttribute(of: element, kAXRoleAttribute) == kAXWindowRole { return element }
+        guard let belongsToSystemUI = belongsToSystemUI(element) else { return .passThrough }
+        guard !belongsToSystemUI else { return .passThrough }
 
-        var windowRef: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, kAXWindowAttribute as CFString, &windowRef) == .success,
-              let windowRef, CFGetTypeID(windowRef) == AXUIElementGetTypeID() else { return nil }
-        return (windowRef as! AXUIElement)
+        let window: AXUIElement
+        if stringAttribute(of: element, kAXRoleAttribute) == kAXWindowRole {
+            window = element
+        } else {
+            var windowRef: CFTypeRef?
+            let windowError = AXUIElementCopyAttributeValue(
+                element,
+                kAXWindowAttribute as CFString,
+                &windowRef
+            )
+            guard windowError == .success,
+                  let windowRef,
+                  CFGetTypeID(windowRef) == AXUIElementGetTypeID() else {
+                return [.noValue, .attributeUnsupported].contains(windowError) ? .noWindow : .passThrough
+            }
+            window = (windowRef as! AXUIElement)
+        }
+
+        guard allowsCapture(of: window) == true else { return .passThrough }
+        return .targetWindow(window)
+    }
+
+    /// Full-screen and Split View windows are managed by macOS and must never
+    /// be captured. The Dock and WindowManager own Stage Manager's sidebar and
+    /// hidden-stage UI, which likewise are not Target Windows.
+    private static func allowsCapture(of element: AXUIElement) -> Bool? {
+        var fullScreenRef: CFTypeRef?
+        let fullScreenError = AXUIElementCopyAttributeValue(
+            element,
+            fullScreenAttribute as CFString,
+            &fullScreenRef
+        )
+        switch fullScreenError {
+        case .success:
+            guard let fullScreen = fullScreenRef as? Bool else { return nil }
+            guard !fullScreen else { return false }
+        case .noValue, .attributeUnsupported:
+            break
+        default:
+            return nil
+        }
+
+        guard let belongsToSystemUI = belongsToSystemUI(element) else { return nil }
+        return !belongsToSystemUI
+    }
+
+    private static func belongsToSystemUI(_ element: AXUIElement) -> Bool? {
+        var pid: pid_t = 0
+        guard AXUIElementGetPid(element, &pid) == .success,
+              let application = NSRunningApplication(processIdentifier: pid) else {
+            return nil
+        }
+
+        if let bundleIdentifier = application.bundleIdentifier {
+            return systemUIBundleIdentifiers.contains(bundleIdentifier)
+        }
+        if let processName = application.localizedName {
+            return systemUIProcessNames.contains(processName)
+        }
+        return nil
     }
 
     init(element: AXUIElement) {

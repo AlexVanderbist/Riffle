@@ -43,11 +43,19 @@ final class GestureController {
         }
         guard type == .scrollWheel else { return Unmanaged.passUnretained(event) }
 
+        let isContinuous = event.getIntegerValueField(.scrollWheelEventIsContinuous) != 0
+        let scrollPhase = event.getIntegerValueField(.scrollWheelEventScrollPhase)
+        let chordMatches = chord.matches(event.flags)
+        var target = TargetWindowHit.noWindow
         let action = latch.handleScroll(
-            isContinuous: event.getIntegerValueField(.scrollWheelEventIsContinuous) != 0,
-            scrollPhase: event.getIntegerValueField(.scrollWheelEventScrollPhase),
+            isContinuous: isContinuous,
+            scrollPhase: scrollPhase,
             momentumPhase: event.getIntegerValueField(.scrollWheelEventMomentumPhase),
-            chordMatches: chord.matches(event.flags)
+            chordMatches: chordMatches,
+            targetAllowsCapture: {
+                target = TargetWindow.captureTarget(at: event.location)
+                return target.allowsCapture
+            }
         )
 
         switch action {
@@ -55,7 +63,7 @@ final class GestureController {
             return Unmanaged.passUnretained(event)
         case .beginMove:
             endSessions()
-            beginMoveSession(at: event.location)
+            beginMoveSession(targeting: target.element, at: event.location)
             applyDeltas(of: event)
             return nil
         case .applyMove:
@@ -82,9 +90,16 @@ final class GestureController {
             return latch.isCapturingMagnify ? nil : Unmanaged.passUnretained(event)
         }
 
+        let phase = GestureLatch.MagnifyPhase(rawValue: appKitEvent.phase.rawValue)
+        let chordMatches = chord.matches(event.flags)
+        var target = TargetWindowHit.noWindow
         let action = latch.handleMagnify(
-            phase: GestureLatch.MagnifyPhase(rawValue: appKitEvent.phase.rawValue),
-            chordMatches: chord.matches(event.flags)
+            phase: phase,
+            chordMatches: chordMatches,
+            targetAllowsCapture: {
+                target = TargetWindow.captureTarget(at: event.location)
+                return target.allowsCapture
+            }
         )
 
         switch action {
@@ -92,7 +107,7 @@ final class GestureController {
             return Unmanaged.passUnretained(event)
         case .beginResize:
             endSessions()
-            beginResizeSession(at: event.location)
+            beginResizeSession(targeting: target.element, at: event.location)
             resizeSession?.apply(magnification: appKitEvent.magnification)
             return nil
         case .applyResize:
@@ -106,8 +121,12 @@ final class GestureController {
         }
     }
 
-    private func beginMoveSession(at cursor: CGPoint) {
-        let session = MoveWindowSession.begin(at: cursor, writeInterval: writeInterval)
+    private func beginMoveSession(targeting element: AXUIElement?, at cursor: CGPoint) {
+        let session = MoveWindowSession.begin(
+            targeting: element,
+            at: cursor,
+            writeInterval: writeInterval
+        )
         session?.onInvalidated = { [weak self] error in
             self?.moveSession = nil
             self?.handleInvalidation(error)
@@ -115,8 +134,12 @@ final class GestureController {
         moveSession = session
     }
 
-    private func beginResizeSession(at cursor: CGPoint) {
-        let session = ResizeWindowSession.begin(at: cursor, writeInterval: writeInterval)
+    private func beginResizeSession(targeting element: AXUIElement?, at cursor: CGPoint) {
+        let session = ResizeWindowSession.begin(
+            targeting: element,
+            at: cursor,
+            writeInterval: writeInterval
+        )
         session?.onInvalidated = { [weak self] error in
             self?.resizeSession = nil
             self?.handleInvalidation(error)

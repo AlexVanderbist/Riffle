@@ -70,7 +70,8 @@ struct GestureLatch {
         isContinuous: Bool,
         scrollPhase: Int64,
         momentumPhase: Int64,
-        chordMatches: Bool
+        chordMatches: Bool,
+        targetAllowsCapture: () -> Bool
     ) -> ScrollAction {
         // Line-based mouse wheels are never ours, even mid-capture.
         guard isContinuous else { return .passThrough }
@@ -80,6 +81,10 @@ struct GestureLatch {
             isCapturingScroll = chordMatches
             guard isCapturingScroll else { return .passThrough }
             guard owner != .resize else { return .discard }
+            guard targetAllowsCapture() else {
+                isCapturingScroll = false
+                return .passThrough
+            }
             owner = .move
             return .beginMove
         }
@@ -105,11 +110,19 @@ struct GestureLatch {
         return .discard
     }
 
-    mutating func handleMagnify(phase: MagnifyPhase, chordMatches: Bool) -> MagnifyAction {
+    mutating func handleMagnify(
+        phase: MagnifyPhase,
+        chordMatches: Bool,
+        targetAllowsCapture: () -> Bool
+    ) -> MagnifyAction {
         if phase.contains(.began) {
             isCapturingMagnify = chordMatches
             guard isCapturingMagnify else { return .passThrough }
             guard owner != .move else { return .discard }
+            guard targetAllowsCapture() else {
+                isCapturingMagnify = false
+                return .passThrough
+            }
             owner = .resize
             return .beginResize
         }
