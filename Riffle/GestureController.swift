@@ -12,6 +12,7 @@ final class GestureController {
     private var latch = GestureLatch()
     private var moveSession: MoveWindowSession?
     private var resizeSession: ResizeWindowSession?
+    private var screenParametersObserver: NSObjectProtocol?
     private let chord = ModifierChord.default
 
     private var writeInterval: TimeInterval {
@@ -21,6 +22,7 @@ final class GestureController {
 
     func start() {
         guard !tap.isRunning else { return }
+        observeScreenParameterChanges()
         tap.handler = { [weak self] type, event in
             guard let self else { return Unmanaged.passUnretained(event) }
             return self.handle(type: type, event: event)
@@ -32,6 +34,7 @@ final class GestureController {
         endSessions()
         latch = GestureLatch()
         tap.stop()
+        stopObservingScreenParameterChanges()
     }
 
     private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
@@ -129,11 +132,15 @@ final class GestureController {
 
     private func applyDeltas(of event: CGEvent) {
         guard let moveSession else { return }
-        moveSession.apply(MoveFeel.translation(
+        let isCurrentTopology = moveSession.apply(MoveFeel.translation(
             pointDeltaAxis1: Double(event.getIntegerValueField(.scrollWheelEventPointDeltaAxis1)),
             pointDeltaAxis2: Double(event.getIntegerValueField(.scrollWheelEventPointDeltaAxis2)),
             isDirectionInvertedFromDevice: NSEvent(cgEvent: event)?.isDirectionInvertedFromDevice ?? true
-        ))
+        ), cursor: event.location)
+
+        if !isCurrentTopology {
+            self.moveSession = nil
+        }
     }
 
     private func endMoveSession() {
@@ -149,5 +156,31 @@ final class GestureController {
     private func endSessions() {
         endMoveSession()
         endResizeSession()
+    }
+
+    private func observeScreenParameterChanges() {
+        guard screenParametersObserver == nil else { return }
+
+        screenParametersObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.endMoveSessionForTopologyChange()
+            }
+        }
+    }
+
+    private func stopObservingScreenParameterChanges() {
+        guard let screenParametersObserver else { return }
+
+        NotificationCenter.default.removeObserver(screenParametersObserver)
+        self.screenParametersObserver = nil
+    }
+
+    private func endMoveSessionForTopologyChange() {
+        moveSession?.endForTopologyChange()
+        moveSession = nil
     }
 }

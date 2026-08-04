@@ -19,18 +19,18 @@ nonisolated final class MoveWindowSession: @unchecked Sendable {
     var onInvalidated: (@MainActor (AXError) -> Void)?
 
     private let targetWindow: TargetWindow
-    private let startPosition: CGPoint
-    private let startCursor: CGPoint
+    private let displayTopology: DisplayTopology
     private let writeInterval: TimeInterval
 
     private struct GestureState {
-        var targetPosition: CGPoint
+        var move: PendingMove
         var isDirty = false
         var isDraining = false
         var isEnded = false
     }
 
     private let state: OSAllocatedUnfairLock<GestureState>
+    private let writeGate = OSAllocatedUnfairLock(initialState: ())
     private let axQueue = DispatchQueue(label: "com.alexvanderbist.Riffle.ax-writes", qos: .userInteractive)
     private static let logger = Logger(subsystem: "com.alexvanderbist.Riffle", category: "move-session")
 
@@ -39,13 +39,15 @@ nonisolated final class MoveWindowSession: @unchecked Sendable {
     /// Hit-tests the window under `cursor` and prepares it for a Move Gesture.
     /// Returns nil when there is no window or it refuses to report its frame;
     /// the gesture is still consumed by the caller, it just moves nothing.
+    @MainActor
     static func begin(at cursor: CGPoint, writeInterval: TimeInterval) -> MoveWindowSession? {
         guard let element = TargetWindow.element(at: cursor) else {
             logger.info("No window under the cursor — move gesture targets nothing")
             return nil
         }
-        guard let position = TargetWindow.position(of: element) else {
-            logger.warning("Target window refuses to report its position — move gesture targets nothing")
+        guard let position = TargetWindow.position(of: element),
+              let size = TargetWindow.size(of: element) else {
+            logger.warning("Target window refuses to report its frame — move gesture targets nothing")
             return nil
         }
 
@@ -53,6 +55,8 @@ nonisolated final class MoveWindowSession: @unchecked Sendable {
             targetWindow: TargetWindow(element: element),
             startPosition: position,
             startCursor: cursor,
+            windowSize: size,
+            displayTopology: DisplayTopology.current,
             writeInterval: writeInterval
         )
     }
@@ -61,41 +65,75 @@ nonisolated final class MoveWindowSession: @unchecked Sendable {
         targetWindow: TargetWindow,
         startPosition: CGPoint,
         startCursor: CGPoint,
+        windowSize: CGSize,
+        displayTopology: DisplayTopology,
         writeInterval: TimeInterval
     ) {
         self.targetWindow = targetWindow
-        self.startPosition = startPosition
-        self.startCursor = startCursor
+        self.displayTopology = displayTopology
         self.writeInterval = writeInterval
-        self.state = OSAllocatedUnfairLock(initialState: GestureState(targetPosition: startPosition))
+        self.state = OSAllocatedUnfairLock(initialState: GestureState(
+            move: PendingMove(
+                frame: CGRect(origin: startPosition, size: windowSize),
+                cursor: startCursor,
+                topology: displayTopology
+            )
+        ))
     }
 
     /// Accumulates a translation into the target position and kicks the worker
     /// if it is idle. Fast enough for the tap callback: no AX work happens here.
-    func apply(_ translation: CGVector) {
+    @MainActor
+    func apply(_ translation: CGVector, cursor: CGPoint) -> Bool {
+        guard displayTopology == DisplayTopology.current else {
+            endForTopologyChange()
+            return false
+        }
+        guard !displayTopology.displays.isEmpty else { return true }
+
         let shouldDrain = state.withLock { state -> Bool in
             guard !state.isEnded else { return false }
-            state.targetPosition.x += translation.dx
-            state.targetPosition.y += translation.dy
+            state.move.apply(translation, cursor: cursor)
             state.isDirty = true
             guard !state.isDraining else { return false }
             state.isDraining = true
             return true
         }
-        guard shouldDrain else { return }
+        guard shouldDrain else { return true }
         axQueue.async { [self] in drain() }
+
+        return true
     }
 
     /// Ends the gesture: pending un-applied targets are dropped, never snapped
     /// to, and the target app's Enhanced UI setting is restored.
     func end() {
+        finishEnding(wasAlreadyEnded: markEnded())
+    }
+
+    /// Waits for an in-flight write before ending so a frame from the old
+    /// display topology cannot land after cancellation completes.
+    func endForTopologyChange() {
+        let wasAlreadyEnded = writeGate.withLock { _ in
+            markEnded()
+        }
+
+        finishEnding(wasAlreadyEnded: wasAlreadyEnded)
+    }
+
+    private func markEnded() -> Bool {
         let wasEnded = state.withLock { state in
             let wasEnded = state.isEnded
             state.isEnded = true
             state.isDirty = false
             return wasEnded
         }
-        guard !wasEnded else { return }
+
+        return wasEnded
+    }
+
+    private func finishEnding(wasAlreadyEnded: Bool) {
+        guard !wasAlreadyEnded else { return }
 
         axQueue.async { [self] in restoreEnhancedUIIfNeeded() }
     }
@@ -104,22 +142,34 @@ nonisolated final class MoveWindowSession: @unchecked Sendable {
 
     private func drain() {
         while true {
-            let target = state.withLock { state -> CGPoint? in
+            let target = state.withLock { state -> PendingMove.Target? in
                 guard state.isDirty, !state.isEnded else {
                     state.isDraining = false
                     return nil
                 }
                 state.isDirty = false
-                return state.targetPosition
+                return state.move.target
             }
             guard let target else { return }
 
             let writeStarted = CFAbsoluteTimeGetCurrent()
-            let error = write(position: target)
+            let error = writeGate.withLock { _ -> AXError? in
+                guard state.withLock({ !$0.isEnded }) else { return nil }
+
+                return write(position: target.position)
+            }
+            guard let error else { return }
 
             switch error {
             case .success:
-                warpCursor(alongside: target)
+                let shouldWarpCursor = state.withLock { state -> Bool in
+                    guard !state.isEnded else { return false }
+                    state.move.accept(target)
+                    return true
+                }
+                if shouldWarpCursor {
+                    warpCursor(to: target.targetCursorPosition)
+                }
             case .invalidUIElement, .apiDisabled:
                 // The window is gone or Accessibility was revoked — the
                 // gesture ends here; the stream stays consumed upstream.
@@ -143,13 +193,10 @@ nonisolated final class MoveWindowSession: @unchecked Sendable {
         targetWindow.set(position: position)
     }
 
-    /// The cursor moves along with the window, keeping the grab point stable.
-    private func warpCursor(alongside position: CGPoint) {
-        let warp = CGPoint(
-            x: startCursor.x + position.x - startPosition.x,
-            y: startCursor.y + position.y - startPosition.y
-        )
-        CGWarpMouseCursorPosition(warp)
+    /// The cursor follows the unconstrained gesture path. At a display edge,
+    /// macOS contains it while the window remains at its constrained position.
+    private func warpCursor(to position: CGPoint) {
+        CGWarpMouseCursorPosition(position)
         // Reset the post-warp suppression interval so the gesture stream keeps
         // flowing uninterrupted.
         CGAssociateMouseAndMouseCursorPosition(1)

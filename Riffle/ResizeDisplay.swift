@@ -1,4 +1,3 @@
-import AppKit
 import CoreGraphics
 
 enum ResizeDisplay {
@@ -18,13 +17,7 @@ enum ResizeDisplay {
     }
 
     static var activeBounds: [CGRect] {
-        NSScreen.screens.compactMap { screen in
-            guard let displayNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
-                return nil
-            }
-
-            return CGDisplayBounds(CGDirectDisplayID(displayNumber.uint32Value))
-        }
+        DisplayTopology.current.displays
     }
 
     private static func contains(_ point: CGPoint, in bounds: CGRect) -> Bool {
