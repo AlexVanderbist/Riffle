@@ -18,10 +18,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         super.init()
 
-        statusItem.button?.image = NSImage(
-            systemSymbolName: "macwindow.on.rectangle",
-            accessibilityDescription: "Riffle"
-        )
+        let statusImage = NSImage(named: "RiffleStatusIcon")
+        statusImage?.isTemplate = true
+        statusImage?.accessibilityDescription = "Riffle"
+        statusItem.button?.image = statusImage
 
         let menu = NSMenu()
         menu.delegate = self
