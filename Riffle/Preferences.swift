@@ -3,11 +3,13 @@ import Foundation
 
 final class Preferences {
     private enum Key {
+        static let bringsTargetWindowToFront = "bringsTargetWindowToFront"
         static let modifierChord = "modifierChord"
     }
 
     private let defaults: UserDefaults
 
+    private(set) var bringsTargetWindowToFront: Bool
     private(set) var modifierChord: ModifierChord
 
     nonisolated deinit {}
@@ -16,12 +18,19 @@ final class Preferences {
         self.defaults = defaults
 
         defaults.register(defaults: [
+            Key.bringsTargetWindowToFront: true,
             Key.modifierChord: Int(ModifierChord.default.flags.rawValue),
         ])
 
+        bringsTargetWindowToFront = defaults.bool(forKey: Key.bringsTargetWindowToFront)
         let storedMask = UInt64(defaults.integer(forKey: Key.modifierChord))
         let storedChord = ModifierChord(flags: CGEventFlags(rawValue: storedMask))
         modifierChord = storedChord.flags.isEmpty ? .default : storedChord
+    }
+
+    func toggleBringTargetWindowToFront() {
+        bringsTargetWindowToFront.toggle()
+        defaults.set(bringsTargetWindowToFront, forKey: Key.bringsTargetWindowToFront)
     }
 
     @discardableResult

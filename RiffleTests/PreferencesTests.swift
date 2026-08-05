@@ -37,4 +37,19 @@ final class PreferencesTests: XCTestCase {
 
         XCTAssertTrue(relaunchedPreferences.modifierChord.matches([.maskCommand, .maskShift]))
     }
+
+    func testFirstLaunchBringsTargetWindowToFront() {
+        let preferences = Preferences(defaults: defaults)
+
+        XCTAssertTrue(preferences.bringsTargetWindowToFront)
+    }
+
+    func testBringTargetWindowToFrontChangesPersistAcrossLaunches() {
+        let preferences = Preferences(defaults: defaults)
+        preferences.toggleBringTargetWindowToFront()
+
+        let relaunchedPreferences = Preferences(defaults: defaults)
+
+        XCTAssertFalse(relaunchedPreferences.bringsTargetWindowToFront)
+    }
 }

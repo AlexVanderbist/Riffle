@@ -14,7 +14,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItemController: StatusItemController?
     private let permissionMonitor = AccessibilityPermissionMonitor()
     private let preferences = Preferences()
-    private lazy var gestureController = GestureController(preferences: preferences)
+    private lazy var gestureController = GestureController(
+        preferences: preferences,
+        targetWindowFronting: TargetWindowFronting()
+    )
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Unit tests inject into this app as their host; don't prompt for

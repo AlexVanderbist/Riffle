@@ -37,6 +37,17 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
+        let bringTargetWindowToFrontItem = NSMenuItem(
+            title: "Bring Window to Front",
+            action: #selector(toggleBringTargetWindowToFront(_:)),
+            keyEquivalent: ""
+        )
+        bringTargetWindowToFrontItem.target = self
+        bringTargetWindowToFrontItem.state = preferences.bringsTargetWindowToFront ? .on : .off
+        menu.addItem(bringTargetWindowToFrontItem)
+
+        menu.addItem(.separator())
+
         let exitItem = NSMenuItem(
             title: "Exit",
             action: #selector(NSApplication.terminate(_:)),
@@ -52,5 +63,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         preferences.toggle(modifier)
         sender.state = preferences.modifierChord.contains(modifier) ? .on : .off
+    }
+
+    @objc private func toggleBringTargetWindowToFront(_ sender: NSMenuItem) {
+        preferences.toggleBringTargetWindowToFront()
+        sender.state = preferences.bringsTargetWindowToFront ? .on : .off
     }
 }

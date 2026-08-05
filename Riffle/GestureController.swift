@@ -14,9 +14,14 @@ final class GestureController {
     private var resizeSession: ResizeWindowSession?
     private var screenParametersObserver: NSObjectProtocol?
     private let preferences: Preferences
+    private let targetWindowFronting: TargetWindowFronting
 
-    init(preferences: Preferences) {
+    init(
+        preferences: Preferences,
+        targetWindowFronting: TargetWindowFronting
+    ) {
         self.preferences = preferences
+        self.targetWindowFronting = targetWindowFronting
     }
 
     private var writeInterval: TimeInterval {
@@ -67,6 +72,7 @@ final class GestureController {
             return Unmanaged.passUnretained(event)
         case .beginMove:
             endSessions()
+            bringTargetWindowToFrontIfEnabled(target.element)
             beginMoveSession(targeting: target.element, at: event.location)
             applyDeltas(of: event)
             return nil
@@ -111,6 +117,7 @@ final class GestureController {
             return Unmanaged.passUnretained(event)
         case .beginResize:
             endSessions()
+            bringTargetWindowToFrontIfEnabled(target.element)
             beginResizeSession(targeting: target.element, at: event.location)
             resizeSession?.apply(magnification: appKitEvent.magnification)
             return nil
@@ -136,6 +143,13 @@ final class GestureController {
             self?.handleInvalidation(error)
         }
         moveSession = session
+    }
+
+    private func bringTargetWindowToFrontIfEnabled(_ element: AXUIElement?) {
+        targetWindowFronting.bringToFront(
+            element,
+            whenEnabled: preferences.bringsTargetWindowToFront
+        )
     }
 
     private func beginResizeSession(targeting element: AXUIElement?, at cursor: CGPoint) {
