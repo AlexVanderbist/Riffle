@@ -31,6 +31,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         gestureController.onAXFailure = { [weak permissionMonitor] in
             permissionMonitor?.recheck()
         }
+        gestureController.onEventTapTimeout = { [weak self] in
+            self?.statusItemController?.disable()
+        }
         permissionMonitor.trustDidChange = { [weak self] _ in
             self?.updateGestureCapture()
         }

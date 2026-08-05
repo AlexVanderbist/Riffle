@@ -94,6 +94,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(exitItem)
     }
 
+    func disable() {
+        guard !isDisabled else { return }
+
+        isDisabled = true
+        disabledStateDidChange()
+    }
+
     @objc private func toggleDisabled(_ sender: NSMenuItem) {
         isDisabled.toggle()
         sender.state = isDisabled ? .on : .off

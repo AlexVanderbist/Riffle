@@ -7,6 +7,7 @@ final class GestureController {
     /// Called when a gesture dies on a hard AX failure — a chance to re-check
     /// Accessibility permission faster than the system notification delivers it.
     var onAXFailure: (() -> Void)?
+    var onEventTapTimeout: (() -> Void)?
 
     private let tap = GestureEventTap()
     private var latch = GestureLatch()
@@ -32,6 +33,12 @@ final class GestureController {
     func start() {
         guard !tap.isRunning else { return }
         observeScreenParameterChanges()
+        tap.didTimeOut = { [weak self] in
+            guard let self else { return }
+
+            self.stop()
+            self.onEventTapTimeout?()
+        }
         tap.handler = { [weak self] type, event in
             guard let self else { return Unmanaged.passUnretained(event) }
             return self.handle(type: type, event: event)
@@ -43,6 +50,7 @@ final class GestureController {
         endSessions()
         latch = GestureLatch()
         tap.stop()
+        tap.didTimeOut = nil
         stopObservingScreenParameterChanges()
     }
 

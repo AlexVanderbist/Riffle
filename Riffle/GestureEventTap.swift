@@ -5,17 +5,19 @@ import os
 /// A session-level active event tap on scroll and gesture events. The handler
 /// returns nil to consume an event — that is the entire capture mechanism.
 ///
-/// macOS disables active taps that respond too slowly (or on user request);
-/// the tap re-enables itself from the disable callbacks, with a periodic
-/// is-enabled watchdog as backstop.
+/// macOS disables active taps that respond too slowly (or on user request).
+/// User-input disables are recovered automatically, but a timeout fails open
+/// and leaves capture disabled so Riffle cannot interfere with system input.
 final class GestureEventTap {
     var handler: ((CGEventType, CGEvent) -> Unmanaged<CGEvent>?)?
+    var didTimeOut: (() -> Void)?
 
     static let gestureEventType: UInt32 = 29
 
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var watchdog: Timer?
+    private var hasFailedOpen = false
     private let logger = Logger(subsystem: "com.alexvanderbist.Riffle", category: "event-tap")
 
     var isRunning: Bool { tap != nil }
@@ -23,6 +25,7 @@ final class GestureEventTap {
     func start() {
         guard tap == nil else { return }
 
+        hasFailedOpen = false
         let mask: CGEventMask = (1 << CGEventType.scrollWheel.rawValue) | (1 << Self.gestureEventType)
         guard let port = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
@@ -66,9 +69,20 @@ final class GestureEventTap {
     }
 
     private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
-        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+        if type == .tapDisabledByTimeout {
+            guard !hasFailedOpen else { return Unmanaged.passUnretained(event) }
+
+            hasFailedOpen = true
+            logger.fault("Event tap timed out — leaving capture disabled to preserve system input")
+            DispatchQueue.main.async { [weak self] in
+                self?.didTimeOut?()
+            }
+
+            return Unmanaged.passUnretained(event)
+        }
+        if type == .tapDisabledByUserInput {
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
-            logger.warning("Event tap was disabled by macOS (\(type.rawValue)) — re-enabled")
+            logger.warning("Event tap was disabled by user input — re-enabled")
             return Unmanaged.passUnretained(event)
         }
         return handler?(type, event) ?? Unmanaged.passUnretained(event)
@@ -77,7 +91,10 @@ final class GestureEventTap {
     private func startWatchdog() {
         let timer = Timer(timeInterval: 5.0, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
-                guard let self, let tap = self.tap, !CGEvent.tapIsEnabled(tap: tap) else { return }
+                guard let self,
+                      !self.hasFailedOpen,
+                      let tap = self.tap,
+                      !CGEvent.tapIsEnabled(tap: tap) else { return }
                 CGEvent.tapEnable(tap: tap, enable: true)
                 self.logger.warning("Watchdog found the event tap disabled — re-enabled")
             }
