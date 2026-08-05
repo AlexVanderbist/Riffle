@@ -1,12 +1,20 @@
 import AppKit
+import os
+import ServiceManagement
 
 final class StatusItemController: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
     private let preferences: Preferences
+    private let loginItem = SMAppService.mainApp
+    private let disabledStateDidChange: () -> Void
+    private let logger = Logger(subsystem: "com.alexvanderbist.Riffle", category: "status-menu")
 
-    init(preferences: Preferences) {
+    private(set) var isDisabled = false
+
+    init(preferences: Preferences, disabledStateDidChange: @escaping () -> Void) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         self.preferences = preferences
+        self.disabledStateDidChange = disabledStateDidChange
 
         super.init()
 
@@ -22,6 +30,17 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
+
+        let disabledItem = NSMenuItem(
+            title: "Disabled",
+            action: #selector(toggleDisabled(_:)),
+            keyEquivalent: ""
+        )
+        disabledItem.target = self
+        disabledItem.state = isDisabled ? .on : .off
+        menu.addItem(disabledItem)
+
+        menu.addItem(.separator())
 
         for modifier in ModifierChord.Modifier.allCases {
             let item = NSMenuItem(
@@ -48,12 +67,37 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
+        let launchAtLoginItem = NSMenuItem(
+            title: "Launch at Login",
+            action: #selector(toggleLaunchAtLogin(_:)),
+            keyEquivalent: ""
+        )
+        launchAtLoginItem.target = self
+        launchAtLoginItem.state = loginItem.status == .enabled ? .on : .off
+        menu.addItem(launchAtLoginItem)
+
+        let resetToDefaultsItem = NSMenuItem(
+            title: "Reset to Defaults",
+            action: #selector(resetToDefaults(_:)),
+            keyEquivalent: ""
+        )
+        resetToDefaultsItem.target = self
+        menu.addItem(resetToDefaultsItem)
+
+        menu.addItem(.separator())
+
         let exitItem = NSMenuItem(
             title: "Exit",
             action: #selector(NSApplication.terminate(_:)),
             keyEquivalent: ""
         )
         menu.addItem(exitItem)
+    }
+
+    @objc private func toggleDisabled(_ sender: NSMenuItem) {
+        isDisabled.toggle()
+        sender.state = isDisabled ? .on : .off
+        disabledStateDidChange()
     }
 
     @objc private func toggleModifier(_ sender: NSMenuItem) {
@@ -68,5 +112,39 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     @objc private func toggleBringTargetWindowToFront(_ sender: NSMenuItem) {
         preferences.toggleBringTargetWindowToFront()
         sender.state = preferences.bringsTargetWindowToFront ? .on : .off
+    }
+
+    @objc private func toggleLaunchAtLogin(_ sender: NSMenuItem) {
+        do {
+            switch loginItem.status {
+            case .enabled:
+                try loginItem.unregister()
+            case .requiresApproval:
+                SMAppService.openSystemSettingsLoginItems()
+            case .notFound, .notRegistered:
+                try loginItem.register()
+            @unknown default:
+                SMAppService.openSystemSettingsLoginItems()
+            }
+        } catch {
+            logger.error("Could not update Launch at Login: \(error.localizedDescription)")
+        }
+
+        sender.state = loginItem.status == .enabled ? .on : .off
+    }
+
+    @objc private func resetToDefaults(_ sender: NSMenuItem) {
+        preferences.resetToDefaults()
+
+        if loginItem.status != .notRegistered {
+            do {
+                try loginItem.unregister()
+            } catch {
+                logger.error("Could not disable Launch at Login: \(error.localizedDescription)")
+            }
+        }
+
+        isDisabled = false
+        disabledStateDidChange()
     }
 }

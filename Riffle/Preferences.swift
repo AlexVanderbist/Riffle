@@ -2,6 +2,11 @@ import CoreGraphics
 import Foundation
 
 final class Preferences {
+    private enum Default {
+        static let bringsTargetWindowToFront = true
+        static let modifierChord = ModifierChord.default
+    }
+
     private enum Key {
         static let bringsTargetWindowToFront = "bringsTargetWindowToFront"
         static let modifierChord = "modifierChord"
@@ -18,8 +23,8 @@ final class Preferences {
         self.defaults = defaults
 
         defaults.register(defaults: [
-            Key.bringsTargetWindowToFront: true,
-            Key.modifierChord: Int(ModifierChord.default.flags.rawValue),
+            Key.bringsTargetWindowToFront: Default.bringsTargetWindowToFront,
+            Key.modifierChord: Int(Default.modifierChord.flags.rawValue),
         ])
 
         bringsTargetWindowToFront = defaults.bool(forKey: Key.bringsTargetWindowToFront)
@@ -31,6 +36,14 @@ final class Preferences {
     func toggleBringTargetWindowToFront() {
         bringsTargetWindowToFront.toggle()
         defaults.set(bringsTargetWindowToFront, forKey: Key.bringsTargetWindowToFront)
+    }
+
+    func resetToDefaults() {
+        defaults.removeObject(forKey: Key.bringsTargetWindowToFront)
+        defaults.removeObject(forKey: Key.modifierChord)
+
+        bringsTargetWindowToFront = Default.bringsTargetWindowToFront
+        modifierChord = Default.modifierChord
     }
 
     @discardableResult

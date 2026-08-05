@@ -24,21 +24,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // permissions or install the status item during a test run.
         guard NSClassFromString("XCTestCase") == nil else { return }
 
-        statusItemController = StatusItemController(preferences: preferences)
+        statusItemController = StatusItemController(preferences: preferences) { [weak self] in
+            self?.updateGestureCapture()
+        }
 
         gestureController.onAXFailure = { [weak permissionMonitor] in
             permissionMonitor?.recheck()
         }
-        permissionMonitor.trustDidChange = { [weak gestureController] trusted in
-            if trusted {
-                gestureController?.start()
-            } else {
-                gestureController?.stop()
-            }
+        permissionMonitor.trustDidChange = { [weak self] _ in
+            self?.updateGestureCapture()
         }
         permissionMonitor.start()
-        if permissionMonitor.isTrusted {
+
+        updateGestureCapture()
+    }
+
+    private func updateGestureCapture() {
+        if permissionMonitor.isTrusted, statusItemController?.isDisabled == false {
             gestureController.start()
+
+            return
         }
+
+        gestureController.stop()
     }
 }
