@@ -45,7 +45,10 @@ nonisolated final class TargetWindow: @unchecked Sendable {
             &element
         )
         guard hitTestError == .success, let element else {
-            return hitTestError == .noValue ? .noWindow : .passThrough
+            if hitTestError == .noValue { return .noWindow }
+            // Apps without an AX hit-test (Telegram) fail here; fall back to
+            // the Window Server's idea of what is under the cursor.
+            return windowListFallback(at: location)
         }
 
         guard let belongsToSystemUI = belongsToSystemUI(element) else { return .passThrough }
@@ -64,11 +67,18 @@ nonisolated final class TargetWindow: @unchecked Sendable {
             guard windowError == .success,
                   let windowRef,
                   CFGetTypeID(windowRef) == AXUIElementGetTypeID() else {
-                return [.noValue, .attributeUnsupported].contains(windowError) ? .noWindow : .passThrough
+                if [.noValue, .attributeUnsupported].contains(windowError) { return .noWindow }
+                return windowListFallback(at: location)
             }
             window = (windowRef as! AXUIElement)
         }
 
+        guard allowsCapture(of: window) == true else { return .passThrough }
+        return .targetWindow(window)
+    }
+
+    private static func windowListFallback(at location: CGPoint) -> TargetWindowHit {
+        guard let window = WindowListHitTest.window(at: location) else { return .passThrough }
         guard allowsCapture(of: window) == true else { return .passThrough }
         return .targetWindow(window)
     }
