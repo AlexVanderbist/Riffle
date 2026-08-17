@@ -68,7 +68,7 @@ final class GestureEventTap {
         logger.info("Scroll event tap stopped")
     }
 
-    private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+    func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout {
             guard !hasFailedOpen else { return Unmanaged.passUnretained(event) }
 
@@ -85,7 +85,11 @@ final class GestureEventTap {
             logger.warning("Event tap was disabled by user input — re-enabled")
             return Unmanaged.passUnretained(event)
         }
-        return handler?(type, event) ?? Unmanaged.passUnretained(event)
+        // Explicit unwrap: `handler?(...) ?? fallback` coalesces away the
+        // handler's nil ("consume this event") and would pass every event
+        // through to the app beneath.
+        guard let handler else { return Unmanaged.passUnretained(event) }
+        return handler(type, event)
     }
 
     private func startWatchdog() {
