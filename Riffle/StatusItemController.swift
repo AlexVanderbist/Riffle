@@ -65,6 +65,23 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         bringTargetWindowToFrontItem.state = preferences.bringsTargetWindowToFront ? .on : .off
         menu.addItem(bringTargetWindowToFrontItem)
 
+        // PROTOTYPE: snap gesture toggles.
+        let snapItem = NSMenuItem(title: "Snapping (Prototype)", action: nil, keyEquivalent: "")
+        let snapMenu = NSMenu()
+        for gesture in SnapGesture.allCases {
+            let item = NSMenuItem(
+                title: gesture.menuTitle,
+                action: #selector(toggleSnapGesture(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = gesture.rawValue
+            item.state = gesture.isEnabled ? .on : .off
+            snapMenu.addItem(item)
+        }
+        snapItem.submenu = snapMenu
+        menu.addItem(snapItem)
+
         menu.addItem(.separator())
 
         let launchAtLoginItem = NSMenuItem(
@@ -114,6 +131,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         preferences.toggle(modifier)
         sender.state = preferences.modifierChord.contains(modifier) ? .on : .off
+    }
+
+    @objc private func toggleSnapGesture(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let gesture = SnapGesture(rawValue: raw) else { return }
+        gesture.setEnabled(!gesture.isEnabled)
+        sender.state = gesture.isEnabled ? .on : .off
     }
 
     @objc private func toggleBringTargetWindowToFront(_ sender: NSMenuItem) {

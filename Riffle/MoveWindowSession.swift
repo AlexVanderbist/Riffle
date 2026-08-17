@@ -27,7 +27,25 @@ nonisolated final class MoveWindowSession: @unchecked Sendable {
         var isDirty = false
         var isDraining = false
         var isEnded = false
+        // PROTOTYPE
+        var snapDetector = SnapDetector()
+        var lastCursor: CGPoint
+        var settleUntil: TimeInterval = 0
     }
+
+    /// PROTOTYPE: deltas are ignored this long after a snap so the tail of
+    /// the push does not drag the freshly snapped window away.
+    private static let snapSettleTime: TimeInterval = 0.25
+
+    /// PROTOTYPE: what the caller should do with the session after `apply`.
+    enum ApplyOutcome {
+        case moving
+        case ended
+    }
+
+    // PROTOTYPE
+    private let snapVisibleFrames: [CGRect]
+    private let startFrame: CGRect
 
     private let state: OSAllocatedUnfairLock<GestureState>
     private let writeGate = OSAllocatedUnfairLock(initialState: ())
@@ -61,6 +79,7 @@ nonisolated final class MoveWindowSession: @unchecked Sendable {
             startCursor: cursor,
             windowSize: size,
             displayTopology: DisplayTopology.current,
+            snapVisibleFrames: SnapDisplays.visibleFrames,
             writeInterval: writeInterval
         )
     }
@@ -71,42 +90,153 @@ nonisolated final class MoveWindowSession: @unchecked Sendable {
         startCursor: CGPoint,
         windowSize: CGSize,
         displayTopology: DisplayTopology,
+        snapVisibleFrames: [CGRect],
         writeInterval: TimeInterval
     ) {
         self.targetWindow = targetWindow
         self.displayTopology = displayTopology
+        self.snapVisibleFrames = snapVisibleFrames
+        self.startFrame = CGRect(origin: startPosition, size: windowSize)
         self.writeInterval = writeInterval
+        var detector = SnapDetector()
+        if let visible = SnapDisplays.visibleFrame(for: startFrame, cursor: startCursor, among: snapVisibleFrames) {
+            detector.currentHalf = SnapLayout.halfSide(of: startFrame, in: visible)
+        }
         self.state = OSAllocatedUnfairLock(initialState: GestureState(
             move: PendingMove(
                 frame: CGRect(origin: startPosition, size: windowSize),
                 cursor: startCursor,
                 topology: displayTopology
-            )
+            ),
+            snapDetector: detector,
+            lastCursor: startCursor
         ))
+    }
+
+    /// PROTOTYPE: -1/0/1 per axis when the cursor sits on the outer edge of
+    /// its display, i.e. macOS is containing it there.
+    private func cursorEdge(_ cursor: CGPoint) -> (x: Int, y: Int) {
+        let tolerance: CGFloat = 2
+        guard let display = displayTopology.displays.first(where: {
+            $0.insetBy(dx: -tolerance, dy: -tolerance).contains(cursor)
+        }) else { return (0, 0) }
+        var edge = (x: 0, y: 0)
+        if cursor.x <= display.minX + tolerance { edge.x = -1 }
+        if cursor.x >= display.maxX - tolerance { edge.x = 1 }
+        if cursor.y <= display.minY + tolerance { edge.y = -1 }
+        if cursor.y >= display.maxY - tolerance { edge.y = 1 }
+        return edge
     }
 
     /// Accumulates a translation into the target position and kicks the worker
     /// if it is idle. Fast enough for the tap callback: no AX work happens here.
     @MainActor
-    func apply(_ translation: CGVector, cursor: CGPoint) -> Bool {
+    func apply(_ translation: CGVector, cursor: CGPoint) -> ApplyOutcome {
         guard displayTopology == DisplayTopology.current else {
             endForTopologyChange()
-            return false
+            return .ended
         }
-        guard !displayTopology.displays.isEmpty else { return true }
+        guard !displayTopology.displays.isEmpty else { return .moving }
 
+        let now = CFAbsoluteTimeGetCurrent()
+        let edge = cursorEdge(cursor)
+        var rebase: (frame: CGRect, cursor: CGPoint, layout: SnapLayout)?
         let shouldDrain = state.withLock { state -> Bool in
             guard !state.isEnded else { return false }
+            guard now >= state.settleUntil else { return false }
+            // PROTOTYPE: compare the constrained position before and after to
+            // learn whether the window is pinned against an edge. The cursor
+            // being contained at a display edge counts as pinned as well.
+            let before = state.move.target?.position
             state.move.apply(translation, cursor: cursor)
+            state.lastCursor = cursor
+            let after = state.move.target?.position
+            var snap: SnapLayout?
+            if let before, let after {
+                let pushX = translation.dx < 0 ? -1 : (translation.dx > 0 ? 1 : 0)
+                let pushY = translation.dy < 0 ? -1 : (translation.dy > 0 ? 1 : 0)
+                snap = state.snapDetector.observe(
+                    translation: translation,
+                    movedX: translation.dx == 0 || (abs(after.x - before.x) > 0.01 && edge.x != pushX),
+                    movedY: translation.dy == 0 || (abs(after.y - before.y) > 0.01 && edge.y != pushY),
+                    now: now
+                )
+            }
+            if let snap, let frame = snapFrame(for: snap, cursor: cursor) {
+                // Keep the gesture alive on the new frame. The cursor stays
+                // put when it is inside the frame, else it is pulled inside.
+                let inset = frame.insetBy(dx: min(20, frame.width / 4), dy: min(20, frame.height / 4))
+                let newCursor = CGPoint(
+                    x: min(max(cursor.x, inset.minX), inset.maxX),
+                    y: min(max(cursor.y, inset.minY), inset.maxY)
+                )
+                state.move = PendingMove(frame: frame, cursor: newCursor, topology: displayTopology)
+                state.snapDetector.reset(currentHalf: snap.halfSide)
+                state.isDirty = false
+                state.settleUntil = now + Self.snapSettleTime
+                rebase = (frame, newCursor, snap)
+                return false
+            }
             state.isDirty = true
             guard !state.isDraining else { return false }
             state.isDraining = true
             return true
         }
-        guard shouldDrain else { return true }
+        if let rebase {
+            Self.logger.info("SNAP \(rebase.layout.description) -> \(rebase.frame.origin.x),\(rebase.frame.origin.y) \(rebase.frame.width)x\(rebase.frame.height)")
+            axQueue.async { [self] in
+                writeGate.withLock { _ in
+                    write(frame: rebase.frame)
+                    if rebase.cursor != cursor { warpCursor(to: rebase.cursor) }
+                }
+            }
+            return .moving
+        }
+        guard shouldDrain else { return .moving }
         axQueue.async { [self] in drain() }
 
-        return true
+        return .moving
+    }
+
+    /// PROTOTYPE: finger lift; a flick snaps, anything else just ends.
+    func liftFingers() {
+        let now = CFAbsoluteTimeGetCurrent()
+        let flick = state.withLock { state -> (SnapLayout, CGPoint)? in
+            guard !state.isEnded, let layout = state.snapDetector.flickLayout(now: now) else { return nil }
+            state.isEnded = true
+            state.isDirty = false
+            return (layout, state.lastCursor)
+        }
+        guard let flick else {
+            end()
+            return
+        }
+        performSnap(flick.0, cursor: flick.1)
+    }
+
+    private func snapFrame(for layout: SnapLayout, cursor: CGPoint) -> CGRect? {
+        SnapDisplays.visibleFrame(for: startFrame, cursor: cursor, among: snapVisibleFrames)
+            .map { layout.frame(in: $0) }
+    }
+
+    /// PROTOTYPE: writes the layout frame and finishes the session.
+    private func performSnap(_ layout: SnapLayout, cursor: CGPoint) {
+        guard let frame = snapFrame(for: layout, cursor: cursor) else {
+            Self.logger.warning("SNAP \(layout.description): no display")
+            finishEnding(wasAlreadyEnded: false)
+            return
+        }
+        Self.logger.info("SNAP \(layout.description) -> \(frame.origin.x),\(frame.origin.y) \(frame.width)x\(frame.height)")
+        axQueue.async { [self] in
+            writeGate.withLock { _ in write(frame: frame) }
+            restoreEnhancedUIIfNeeded()
+        }
+    }
+
+    private func write(frame: CGRect) {
+        _ = targetWindow.set(position: frame.origin)
+        _ = targetWindow.set(size: frame.size)
+        _ = targetWindow.set(position: frame.origin)
     }
 
     /// Ends the gesture: pending un-applied targets are dropped, never snapped
