@@ -197,8 +197,8 @@ nonisolated final class MoveWindowSession: @unchecked Sendable {
         targetWindow.set(position: position)
     }
 
-    /// The cursor follows the unconstrained gesture path. At a display edge,
-    /// macOS contains it while the window remains at its constrained position.
+    /// The cursor keeps its grab offset from the window, so it stops where
+    /// the window stops and comes back the moment the window does.
     private func warpCursor(to position: CGPoint) {
         CGWarpMouseCursorPosition(position)
         // Reset the post-warp suppression interval so the gesture stream keeps

@@ -8,7 +8,10 @@ nonisolated struct PendingMove {
     }
 
     private var requestedPosition: CGPoint
-    private var targetCursorPosition: CGPoint
+    /// Where the cursor grabbed the window, relative to its origin. The
+    /// cursor rides along at this offset from wherever the window actually
+    /// lands, so an edge or the menu bar stops both together.
+    private let grabOffset: CGVector
     private var eventCursorPosition: CGPoint
     private var lastAppliedPosition: CGPoint
     private let windowSize: CGSize
@@ -16,7 +19,7 @@ nonisolated struct PendingMove {
 
     init(frame: CGRect, cursor: CGPoint, topology: DisplayTopology) {
         requestedPosition = frame.origin
-        targetCursorPosition = cursor
+        grabOffset = CGVector(dx: cursor.x - frame.origin.x, dy: cursor.y - frame.origin.y)
         eventCursorPosition = cursor
         lastAppliedPosition = frame.origin
         windowSize = frame.size
@@ -34,7 +37,10 @@ nonisolated struct PendingMove {
 
         return Target(
             position: position,
-            targetCursorPosition: targetCursorPosition,
+            targetCursorPosition: CGPoint(
+                x: position.x + grabOffset.dx,
+                y: position.y + grabOffset.dy
+            ),
             requestedPosition: requestedPosition
         )
     }
@@ -42,8 +48,6 @@ nonisolated struct PendingMove {
     mutating func apply(_ translation: CGVector, cursor: CGPoint) {
         requestedPosition.x += translation.dx
         requestedPosition.y += translation.dy
-        targetCursorPosition.x += translation.dx
-        targetCursorPosition.y += translation.dy
         eventCursorPosition = cursor
     }
 
@@ -69,13 +73,19 @@ nonisolated enum MoveGeometry {
         cursor: CGPoint,
         topology: DisplayTopology
     ) -> CGPoint? {
-        let allRegions = topology.displays.map { display in
+        let allRegions = zip(topology.displays, topology.menuBarHeights).map { display, menuBarHeight in
             let visibleWidth = min(minimumVisibleLength, windowSize.width, display.width)
             let visibleHeight = min(minimumVisibleLength, windowSize.height, display.height)
             let minimumX = display.minX - windowSize.width + visibleWidth
             let maximumX = display.maxX - visibleWidth
-            let minimumY = display.minY - windowSize.height + visibleHeight
             let maximumY = display.maxY - visibleHeight
+            // macOS pins a window's top edge below the menu bar; requesting
+            // anything higher is silently clamped, so clamp here instead and
+            // keep the requested position, cursor and window in step.
+            let overhangMinimumY = display.minY - windowSize.height + visibleHeight
+            let minimumY = menuBarHeight > 0
+                ? min(max(overhangMinimumY, display.minY + menuBarHeight), maximumY)
+                : overhangMinimumY
 
             return ValidRegion(
                 display: display,

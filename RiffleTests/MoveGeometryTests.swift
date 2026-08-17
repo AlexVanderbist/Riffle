@@ -198,4 +198,64 @@ final class MoveGeometryTests: XCTestCase {
 
         XCTAssertEqual(move.target?.position.x, -680)
     }
+
+    func testKeepsTheWindowTopBelowTheMenuBar() {
+        let display = CGRect(x: 0, y: 0, width: 1920, height: 1080)
+
+        let constrained = MoveGeometry.constrain(
+            origin: CGPoint(x: 100, y: -300),
+            windowSize: CGSize(width: 800, height: 600),
+            cursor: CGPoint(x: 200, y: 10),
+            topology: DisplayTopology(displays: [display], mainDisplay: display, menuBarHeights: [25])
+        )
+
+        XCTAssertEqual(constrained, CGPoint(x: 100, y: 25))
+    }
+
+    func testDisplaysWithoutAMenuBarStillAllowTheTopEdgeToOverhang() {
+        let display = CGRect(x: 0, y: 0, width: 1920, height: 1080)
+
+        let constrained = MoveGeometry.constrain(
+            origin: CGPoint(x: 100, y: -300),
+            windowSize: CGSize(width: 800, height: 600),
+            cursor: CGPoint(x: 200, y: 10),
+            topology: DisplayTopology(displays: [display], mainDisplay: display, menuBarHeights: [0])
+        )
+
+        XCTAssertEqual(constrained, CGPoint(x: 100, y: -300))
+    }
+
+    func testReversingAtTheMenuBarMovesImmediatelyWithoutConsumingHiddenOvershoot() throws {
+        let display = CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        var move = PendingMove(
+            frame: CGRect(x: 100, y: 200, width: 800, height: 600),
+            cursor: CGPoint(x: 300, y: 300),
+            topology: DisplayTopology(displays: [display], mainDisplay: display, menuBarHeights: [25])
+        )
+        move.apply(CGVector(dx: 0, dy: -1000), cursor: CGPoint(x: 300, y: 300))
+        let menuBar = try XCTUnwrap(move.target)
+        XCTAssertEqual(menuBar.position.y, 25)
+        move.accept(menuBar)
+
+        move.apply(CGVector(dx: 0, dy: 10), cursor: CGPoint(x: 300, y: 0))
+
+        XCTAssertEqual(move.target?.position.y, 35)
+    }
+
+    func testCursorStaysAtItsGrabOffsetWhenTheWindowIsStoppedByTheMenuBar() throws {
+        let display = CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        var move = PendingMove(
+            frame: CGRect(x: 100, y: 200, width: 800, height: 600),
+            cursor: CGPoint(x: 300, y: 300),
+            topology: DisplayTopology(displays: [display], mainDisplay: display, menuBarHeights: [25])
+        )
+        move.apply(CGVector(dx: 0, dy: -1000), cursor: CGPoint(x: 300, y: 300))
+        let menuBar = try XCTUnwrap(move.target)
+        move.accept(menuBar)
+        XCTAssertEqual(menuBar.targetCursorPosition, CGPoint(x: 300, y: 125))
+
+        move.apply(CGVector(dx: 0, dy: 10), cursor: CGPoint(x: 300, y: 125))
+
+        XCTAssertEqual(move.target?.targetCursorPosition, CGPoint(x: 300, y: 135))
+    }
 }
