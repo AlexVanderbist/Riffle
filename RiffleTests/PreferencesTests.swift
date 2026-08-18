@@ -58,14 +58,36 @@ final class PreferencesTests: XCTestCase {
         preferences.toggle(.command)
         preferences.toggle(.control)
         preferences.toggleBringTargetWindowToFront()
+        preferences.toggleSnapGesture(.wiggle)
 
         preferences.resetToDefaults()
 
         XCTAssertTrue(preferences.modifierChord.matches([.maskControl, .maskShift]))
         XCTAssertTrue(preferences.bringsTargetWindowToFront)
+        XCTAssertTrue(preferences.isSnapGestureEnabled(.wiggle))
 
         let relaunchedPreferences = Preferences(defaults: defaults)
         XCTAssertTrue(relaunchedPreferences.modifierChord.matches([.maskControl, .maskShift]))
         XCTAssertTrue(relaunchedPreferences.bringsTargetWindowToFront)
+        XCTAssertTrue(relaunchedPreferences.isSnapGestureEnabled(.wiggle))
+    }
+
+    func testFirstLaunchEnablesEverySnapGesture() {
+        let preferences = Preferences(defaults: defaults)
+
+        XCTAssertEqual(preferences.enabledSnapGestures, Set(SnapGesture.allCases))
+    }
+
+    func testSnapGestureToggleChangesPersistAcrossLaunches() {
+        let preferences = Preferences(defaults: defaults)
+        preferences.toggleSnapGesture(.flick)
+        preferences.toggleSnapGesture(.cornerPress)
+
+        let relaunchedPreferences = Preferences(defaults: defaults)
+
+        XCTAssertFalse(relaunchedPreferences.isSnapGestureEnabled(.flick))
+        XCTAssertFalse(relaunchedPreferences.isSnapGestureEnabled(.cornerPress))
+        XCTAssertTrue(relaunchedPreferences.isSnapGestureEnabled(.edgePress))
+        XCTAssertTrue(relaunchedPreferences.isSnapGestureEnabled(.wiggle))
     }
 }

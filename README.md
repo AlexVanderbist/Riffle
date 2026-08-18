@@ -14,6 +14,11 @@ Point at a window, hold <kbd>Control</kbd> + <kbd>Shift</kbd>, then:
 
 - Swipe with two fingers to move the window.
 - Pinch with two fingers to resize it proportionally around its center.
+- While moving, snap the window into place:
+  - Flick left or right and lift → left or right half. Flick up → maximized.
+  - Push the window into a screen edge → that half, or maximized at the top. Push toward a corner → that quarter.
+  - From a half, swipe or push up or down → the top or bottom quarter on that side.
+  - Wiggle left and right quickly → 80% of the screen, centered.
 
 Riffle targets the window beneath the cursor, even when it is not currently focused. The modifier keys and focus behavior can be changed from its menu bar menu.
 
@@ -26,7 +31,7 @@ Riffle is currently a personal, source-built utility for macOS 26.2 or later.
 3. Build and run the `Riffle` scheme.
 4. Grant Riffle access in System Settings → Privacy & Security → Accessibility.
 
-Riffle runs as a menu bar app without a Dock icon. Use its menu to change the modifier chord, temporarily disable gesture capture, bring moved windows to the front, or launch Riffle at login.
+Riffle runs as a menu bar app without a Dock icon. Use its menu to change the modifier chord, temporarily disable gesture capture, bring moved windows to the front, switch individual snap gestures off, or launch Riffle at login.
 
 ## Development
 

@@ -88,7 +88,9 @@ final class GestureController {
             applyDeltas(of: event)
             return nil
         case .liftFingers:
-            endMoveSession()
+            // A Flick on lift snaps; the session ends either way.
+            moveSession?.liftFingers()
+            moveSession = nil
             return nil
         case .finishStream:
             // The session normally ended at liftFingers; this is a backstop
@@ -144,6 +146,7 @@ final class GestureController {
         let session = MoveWindowSession.begin(
             targeting: element,
             at: cursor,
+            enabledSnapGestures: preferences.enabledSnapGestures,
             writeInterval: writeInterval
         )
         session?.onInvalidated = { [weak self] error in
@@ -181,13 +184,13 @@ final class GestureController {
 
     private func applyDeltas(of event: CGEvent) {
         guard let moveSession else { return }
-        let isCurrentTopology = moveSession.apply(MoveFeel.translation(
+        let outcome = moveSession.apply(MoveFeel.translation(
             pointDeltaAxis1: Double(event.getIntegerValueField(.scrollWheelEventPointDeltaAxis1)),
             pointDeltaAxis2: Double(event.getIntegerValueField(.scrollWheelEventPointDeltaAxis2)),
             isDirectionInvertedFromDevice: NSEvent(cgEvent: event)?.isDirectionInvertedFromDevice ?? true
         ), cursor: event.location)
 
-        if !isCurrentTopology {
+        if outcome == .ended {
             self.moveSession = nil
         }
     }
