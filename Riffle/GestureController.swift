@@ -88,7 +88,7 @@ final class GestureController {
             applyDeltas(of: event)
             return nil
         case .liftFingers:
-            // PROTOTYPE: a flick on lift snaps instead of just ending.
+            // A Flick on lift snaps; the session ends either way.
             moveSession?.liftFingers()
             moveSession = nil
             return nil
@@ -146,6 +146,7 @@ final class GestureController {
         let session = MoveWindowSession.begin(
             targeting: element,
             at: cursor,
+            enabledSnapGestures: preferences.enabledSnapGestures,
             writeInterval: writeInterval
         )
         session?.onInvalidated = { [weak self] error in

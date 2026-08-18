@@ -65,9 +65,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         bringTargetWindowToFrontItem.state = preferences.bringsTargetWindowToFront ? .on : .off
         menu.addItem(bringTargetWindowToFrontItem)
 
-        // PROTOTYPE: snap gesture toggles.
-        let snapItem = NSMenuItem(title: "Snapping (Prototype)", action: nil, keyEquivalent: "")
-        let snapMenu = NSMenu()
+        let snappingItem = NSMenuItem(title: "Snapping", action: nil, keyEquivalent: "")
+        let snappingMenu = NSMenu()
+        snappingMenu.addItem(.sectionHeader(title: "While moving a window"))
         for gesture in SnapGesture.allCases {
             let item = NSMenuItem(
                 title: gesture.menuTitle,
@@ -76,11 +76,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             )
             item.target = self
             item.representedObject = gesture.rawValue
-            item.state = gesture.isEnabled ? .on : .off
-            snapMenu.addItem(item)
+            item.image = NSImage(systemSymbolName: gesture.menuSymbolName, accessibilityDescription: nil)
+            item.state = preferences.isSnapGestureEnabled(gesture) ? .on : .off
+            snappingMenu.addItem(item)
         }
-        snapItem.submenu = snapMenu
-        menu.addItem(snapItem)
+        snappingItem.submenu = snappingMenu
+        menu.addItem(snappingItem)
 
         menu.addItem(.separator())
 
@@ -134,10 +135,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     @objc private func toggleSnapGesture(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String,
-              let gesture = SnapGesture(rawValue: raw) else { return }
-        gesture.setEnabled(!gesture.isEnabled)
-        sender.state = gesture.isEnabled ? .on : .off
+        guard let rawValue = sender.representedObject as? String,
+              let gesture = SnapGesture(rawValue: rawValue) else {
+            return
+        }
+
+        preferences.toggleSnapGesture(gesture)
+        sender.state = preferences.isSnapGestureEnabled(gesture) ? .on : .off
     }
 
     @objc private func toggleBringTargetWindowToFront(_ sender: NSMenuItem) {
