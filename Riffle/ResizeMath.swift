@@ -1,7 +1,7 @@
 import CoreGraphics
 
-nonisolated struct PendingResize {
-    struct Target {
+nonisolated struct PendingResize: PendingFrameAdjustment {
+    struct Target: PendingFrameTarget {
         let frame: CGRect
         fileprivate let magnification: Double
     }
@@ -61,6 +61,10 @@ nonisolated struct PendingResize {
 
     mutating func apply(magnification: Double) {
         pendingMagnification += magnification
+    }
+
+    mutating func apply(_ magnification: Double) {
+        apply(magnification: magnification)
     }
 
     mutating func accept(to acceptedFrame: CGRect, consuming target: Target) {

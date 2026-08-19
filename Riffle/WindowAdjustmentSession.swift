@@ -2,47 +2,71 @@ import AppKit
 import ApplicationServices
 import os
 
-/// One Resize Gesture against one Target Window.
+/// A frame target and the pending input it consumed, so the session can rebase
+/// after the app accepts a different frame.
+nonisolated protocol PendingFrameTarget {
+    var frame: CGRect { get }
+}
+
+/// Pure pending-frame state of one Resize Gesture (uniform or Directional Pinch): accumulates raw
+/// gesture input and computes the frame to write next.
+nonisolated protocol PendingFrameAdjustment {
+    associatedtype Input
+    associatedtype Target: PendingFrameTarget
+
+    init(frame: CGRect, displayBounds: CGRect)
+    var target: Target { get }
+    mutating func apply(_ input: Input)
+    mutating func accept(to acceptedFrame: CGRect, consuming target: Target)
+}
+
+typealias ResizeWindowSession = WindowAdjustmentSession<PendingResize>
+typealias StretchWindowSession = WindowAdjustmentSession<PendingStretch>
+
+/// One Resize Gesture (uniform or Directional Pinch) against one Target Window.
 ///
-/// Magnification is accumulated without AX work on the tap callback. A serial
-/// worker writes the latest coalesced frame and then rebases pending resize
-/// state to the frame the app actually accepted.
-nonisolated final class ResizeWindowSession: @unchecked Sendable {
+/// Gesture input is accumulated without AX work on the tap callback. A serial
+/// worker writes the latest coalesced frame and then rebases the pending
+/// adjustment to the frame the app actually accepted.
+nonisolated final class WindowAdjustmentSession<Adjustment: PendingFrameAdjustment>: @unchecked Sendable {
     var onInvalidated: (@MainActor (AXError) -> Void)?
 
     private let targetWindow: TargetWindow
     private let writeInterval: TimeInterval
 
     private struct GestureState {
-        var resize: PendingResize
+        var adjustment: Adjustment
         var isDirty = false
         var isDraining = false
         var isEnded = false
     }
 
     private let state: OSAllocatedUnfairLock<GestureState>
-    private let axQueue = DispatchQueue(label: "com.alexvanderbist.Riffle.ax-resize-writes", qos: .userInteractive)
-    private static let logger = Logger(subsystem: "com.alexvanderbist.Riffle", category: "resize-session")
+    private let axQueue = DispatchQueue(label: "com.alexvanderbist.Riffle.ax-frame-writes", qos: .userInteractive)
+    private static var logger: Logger {
+        Logger(subsystem: "com.alexvanderbist.Riffle", category: "adjustment-session")
+    }
+
     @MainActor
     static func begin(
         targeting element: AXUIElement?,
         at cursor: CGPoint,
         writeInterval: TimeInterval
-    ) -> ResizeWindowSession? {
+    ) -> WindowAdjustmentSession? {
         guard let element else {
-            logger.info("No window under the cursor — resize gesture targets nothing")
+            logger.info("No window under the cursor — gesture targets nothing")
             return nil
         }
         guard let position = TargetWindow.position(of: element),
               let size = TargetWindow.size(of: element) else {
-            logger.warning("Target window refuses to report its frame — resize gesture targets nothing")
+            logger.warning("Target window refuses to report its frame — gesture targets nothing")
             return nil
         }
 
         let targetWindow = TargetWindow(element: element)
         guard targetWindow.isResizable else {
             targetWindow.restoreEnhancedUIIfNeeded()
-            logger.info("Target window is not resizable — resize gesture targets nothing")
+            logger.info("Target window is not resizable — gesture targets nothing")
             return nil
         }
 
@@ -53,31 +77,31 @@ nonisolated final class ResizeWindowSession: @unchecked Sendable {
             among: ResizeDisplay.activeBounds
         ) else {
             targetWindow.restoreEnhancedUIIfNeeded()
-            logger.warning("No active Resize Display — resize gesture targets nothing")
+            logger.warning("No active Resize Display — gesture targets nothing")
             return nil
         }
 
-        return ResizeWindowSession(
+        return WindowAdjustmentSession(
             targetWindow: targetWindow,
-            resize: PendingResize(frame: frame, displayBounds: displayBounds),
+            adjustment: Adjustment(frame: frame, displayBounds: displayBounds),
             writeInterval: writeInterval
         )
     }
 
     private init(
         targetWindow: TargetWindow,
-        resize: PendingResize,
+        adjustment: Adjustment,
         writeInterval: TimeInterval
     ) {
         self.targetWindow = targetWindow
         self.writeInterval = writeInterval
-        state = OSAllocatedUnfairLock(initialState: GestureState(resize: resize))
+        state = OSAllocatedUnfairLock(initialState: GestureState(adjustment: adjustment))
     }
 
-    func apply(magnification: Double) {
+    func apply(_ input: Adjustment.Input) {
         let shouldDrain = state.withLock { state -> Bool in
             guard !state.isEnded else { return false }
-            state.resize.apply(magnification: magnification)
+            state.adjustment.apply(input)
             state.isDirty = true
             guard !state.isDraining else { return false }
             state.isDraining = true
@@ -101,13 +125,13 @@ nonisolated final class ResizeWindowSession: @unchecked Sendable {
 
     private func drain() {
         while true {
-            let target = state.withLock { state -> PendingResize.Target? in
+            let target = state.withLock { state -> Adjustment.Target? in
                 guard state.isDirty, !state.isEnded else {
                     state.isDraining = false
                     return nil
                 }
                 state.isDirty = false
-                return state.resize.target
+                return state.adjustment.target
             }
             guard let target else { return }
 
@@ -118,7 +142,7 @@ nonisolated final class ResizeWindowSession: @unchecked Sendable {
             case .success:
                 state.withLock { state in
                     guard !state.isEnded else { return }
-                    state.resize.accept(to: result.acceptedFrame ?? target.frame, consuming: target)
+                    state.adjustment.accept(to: result.acceptedFrame ?? target.frame, consuming: target)
                 }
             case .invalidUIElement, .apiDisabled:
                 invalidate(with: result.error)

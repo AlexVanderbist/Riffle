@@ -13,6 +13,8 @@ final class GestureController {
     private var latch = GestureLatch()
     private var moveSession: MoveWindowSession?
     private var resizeSession: ResizeWindowSession?
+    private var stretchSession: StretchWindowSession?
+    private var twoFingerSpread = TwoFingerSpread()
     private var screenParametersObserver: NSObjectProtocol?
     private let preferences: Preferences
     private let targetWindowFronting: TargetWindowFronting
@@ -56,7 +58,7 @@ final class GestureController {
 
     private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type.rawValue == GestureEventTap.gestureEventType {
-            return handleMagnify(event)
+            return handleGesture(event)
         }
         guard type == .scrollWheel else { return Unmanaged.passUnretained(event) }
 
@@ -102,14 +104,36 @@ final class GestureController {
         }
     }
 
-    private func handleMagnify(_ event: CGEvent) -> Unmanaged<CGEvent>? {
+    private func handleGesture(_ event: CGEvent) -> Unmanaged<CGEvent>? {
         guard let appKitEvent = NSEvent(cgEvent: event) else {
             return Unmanaged.passUnretained(event)
+        }
+
+        // A Directional Pinch reads finger separation from every gesture
+        // frame of the captured pinch, not only the magnify frames.
+        if latch.isCapturingMagnify, let stretchSession {
+            if let spread = twoFingerSpread.handle(touches: Self.touches(of: appKitEvent)) {
+                stretchSession.apply(spread)
+            }
         }
         guard appKitEvent.type == .magnify else {
             return latch.isCapturingMagnify ? nil : Unmanaged.passUnretained(event)
         }
 
+        return handleMagnify(appKitEvent, cgEvent: event)
+    }
+
+    private static func touches(of event: NSEvent) -> [TrackpadTouch] {
+        event.allTouches().map { touch in
+            TrackpadTouch(
+                id: touch.identity.hash,
+                isTouching: !touch.phase.intersection(.touching).isEmpty,
+                normalizedPosition: touch.normalizedPosition
+            )
+        }
+    }
+
+    private func handleMagnify(_ appKitEvent: NSEvent, cgEvent event: CGEvent) -> Unmanaged<CGEvent>? {
         let phase = GestureLatch.MagnifyPhase(rawValue: appKitEvent.phase.rawValue)
         let chordMatches = preferences.modifierChord.matches(event.flags)
         var target = TargetWindowHit.noWindow
@@ -128,14 +152,20 @@ final class GestureController {
         case .beginResize:
             endSessions()
             bringTargetWindowToFrontIfEnabled(target.element)
-            beginResizeSession(targeting: target.element, at: event.location)
-            resizeSession?.apply(magnification: appKitEvent.magnification)
+            if preferences.isDirectionalPinchEnabled {
+                twoFingerSpread = TwoFingerSpread()
+                beginStretchSession(targeting: target.element, at: event.location)
+            } else {
+                beginResizeSession(targeting: target.element, at: event.location)
+                resizeSession?.apply(appKitEvent.magnification)
+            }
             return nil
         case .applyResize:
-            resizeSession?.apply(magnification: appKitEvent.magnification)
+            resizeSession?.apply(appKitEvent.magnification)
             return nil
         case .liftFingers:
             endResizeSession()
+            endStretchSession()
             return nil
         case .discard:
             return nil
@@ -176,6 +206,19 @@ final class GestureController {
         resizeSession = session
     }
 
+    private func beginStretchSession(targeting element: AXUIElement?, at cursor: CGPoint) {
+        let session = StretchWindowSession.begin(
+            targeting: element,
+            at: cursor,
+            writeInterval: writeInterval
+        )
+        session?.onInvalidated = { [weak self] error in
+            self?.stretchSession = nil
+            self?.handleInvalidation(error)
+        }
+        stretchSession = session
+    }
+
     private func handleInvalidation(_ error: AXError) {
         if error == .apiDisabled {
             onAXFailure?()
@@ -205,9 +248,15 @@ final class GestureController {
         resizeSession = nil
     }
 
+    private func endStretchSession() {
+        stretchSession?.end()
+        stretchSession = nil
+    }
+
     private func endSessions() {
         endMoveSession()
         endResizeSession()
+        endStretchSession()
     }
 
     private func observeScreenParameterChanges() {

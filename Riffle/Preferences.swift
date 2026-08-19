@@ -6,11 +6,13 @@ final class Preferences {
         static let bringsTargetWindowToFront = true
         static let modifierChord = ModifierChord.default
         static let snapGesturesEnabled = true
+        static let directionalPinch = false
     }
 
     private enum Key {
         static let bringsTargetWindowToFront = "bringsTargetWindowToFront"
         static let modifierChord = "modifierChord"
+        static let directionalPinch = "directionalPinch"
 
         static func snapGesture(_ gesture: SnapGesture) -> String {
             "snap.\(gesture.rawValue)"
@@ -22,6 +24,9 @@ final class Preferences {
     private(set) var bringsTargetWindowToFront: Bool
     private(set) var modifierChord: ModifierChord
     private(set) var enabledSnapGestures: Set<SnapGesture>
+    /// When on, a Resize Gesture stretches along the pinch axis instead of
+    /// scaling uniformly.
+    private(set) var isDirectionalPinchEnabled: Bool
 
     nonisolated deinit {}
 
@@ -31,6 +36,7 @@ final class Preferences {
         var registered: [String: Any] = [
             Key.bringsTargetWindowToFront: Default.bringsTargetWindowToFront,
             Key.modifierChord: Int(Default.modifierChord.flags.rawValue),
+            Key.directionalPinch: Default.directionalPinch,
         ]
         for gesture in SnapGesture.allCases {
             registered[Key.snapGesture(gesture)] = Default.snapGesturesEnabled
@@ -44,6 +50,12 @@ final class Preferences {
         enabledSnapGestures = Set(SnapGesture.allCases.filter { gesture in
             defaults.bool(forKey: Key.snapGesture(gesture))
         })
+        isDirectionalPinchEnabled = defaults.bool(forKey: Key.directionalPinch)
+    }
+
+    func toggleDirectionalPinch() {
+        isDirectionalPinchEnabled.toggle()
+        defaults.set(isDirectionalPinchEnabled, forKey: Key.directionalPinch)
     }
 
     func isSnapGestureEnabled(_ gesture: SnapGesture) -> Bool {
@@ -70,10 +82,12 @@ final class Preferences {
         for gesture in SnapGesture.allCases {
             defaults.removeObject(forKey: Key.snapGesture(gesture))
         }
+        defaults.removeObject(forKey: Key.directionalPinch)
 
         bringsTargetWindowToFront = Default.bringsTargetWindowToFront
         modifierChord = Default.modifierChord
         enabledSnapGestures = Set(SnapGesture.allCases)
+        isDirectionalPinchEnabled = Default.directionalPinch
     }
 
     @discardableResult

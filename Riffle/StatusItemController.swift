@@ -65,6 +65,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         bringTargetWindowToFrontItem.state = preferences.bringsTargetWindowToFront ? .on : .off
         menu.addItem(bringTargetWindowToFrontItem)
 
+        let directionalPinchItem = NSMenuItem(
+            title: "Directional Pinch",
+            action: #selector(toggleDirectionalPinch(_:)),
+            keyEquivalent: ""
+        )
+        directionalPinchItem.target = self
+        directionalPinchItem.state = preferences.isDirectionalPinchEnabled ? .on : .off
+        menu.addItem(directionalPinchItem)
+
         let snappingItem = NSMenuItem(title: "Snapping", action: nil, keyEquivalent: "")
         let snappingMenu = NSMenu()
         snappingMenu.addItem(.sectionHeader(title: "While moving a window"))
@@ -142,6 +151,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         preferences.toggleSnapGesture(gesture)
         sender.state = preferences.isSnapGestureEnabled(gesture) ? .on : .off
+    }
+
+    @objc private func toggleDirectionalPinch(_ sender: NSMenuItem) {
+        preferences.toggleDirectionalPinch()
+        sender.state = preferences.isDirectionalPinchEnabled ? .on : .off
     }
 
     @objc private func toggleBringTargetWindowToFront(_ sender: NSMenuItem) {

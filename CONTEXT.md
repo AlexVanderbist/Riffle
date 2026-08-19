@@ -19,6 +19,14 @@ _Avoid_: Drag Gesture, Scroll Gesture
 A modifier-gated two-finger pinch that proportionally resizes the Target Window around its center.
 _Avoid_: Zoom Gesture
 
+**Directional Pinch**:
+A Preferences mode for the Resize Gesture. Instead of scaling uniformly, the change in horizontal finger separation changes the width and the change in vertical separation changes the height. Each axis is anchored to the Resize Display by Gap Share.
+_Avoid_: Stretch Gesture, Non-uniform Resize, Axis Pinch
+
+**Gap Share**:
+The rule that positions a window after a Directional Pinch changes its size on one axis: the gap between the window and the leading display edge keeps its share of the total free space on that axis. A centered window grows evenly, a window touching an edge keeps touching it.
+_Avoid_: Display-center Anchor, Proportional Anchor
+
 **Resize Display**:
 The display containing the Target Window's center when a Resize Gesture begins. If the center is outside every display, it is the display containing the cursor.
 

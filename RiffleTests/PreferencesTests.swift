@@ -59,17 +59,30 @@ final class PreferencesTests: XCTestCase {
         preferences.toggle(.control)
         preferences.toggleBringTargetWindowToFront()
         preferences.toggleSnapGesture(.wiggle)
+        preferences.toggleDirectionalPinch()
 
         preferences.resetToDefaults()
 
         XCTAssertTrue(preferences.modifierChord.matches([.maskControl, .maskShift]))
         XCTAssertTrue(preferences.bringsTargetWindowToFront)
         XCTAssertTrue(preferences.isSnapGestureEnabled(.wiggle))
+        XCTAssertFalse(preferences.isDirectionalPinchEnabled)
 
         let relaunchedPreferences = Preferences(defaults: defaults)
         XCTAssertTrue(relaunchedPreferences.modifierChord.matches([.maskControl, .maskShift]))
         XCTAssertTrue(relaunchedPreferences.bringsTargetWindowToFront)
         XCTAssertTrue(relaunchedPreferences.isSnapGestureEnabled(.wiggle))
+        XCTAssertFalse(relaunchedPreferences.isDirectionalPinchEnabled)
+    }
+
+    func testFirstLaunchUsesTheUniformPinch() {
+        XCTAssertFalse(Preferences(defaults: defaults).isDirectionalPinchEnabled)
+    }
+
+    func testDirectionalPinchChangesPersistAcrossLaunches() {
+        Preferences(defaults: defaults).toggleDirectionalPinch()
+
+        XCTAssertTrue(Preferences(defaults: defaults).isDirectionalPinchEnabled)
     }
 
     func testFirstLaunchEnablesEverySnapGesture() {
